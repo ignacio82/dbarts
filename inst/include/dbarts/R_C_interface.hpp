@@ -9,11 +9,15 @@ namespace dbarts {
   struct Data;
   
   struct CGMPrior;
-  struct NormalPrior;
+  // struct NormalPrior;
   struct ChiSquaredPrior;
   
   struct BARTFit;
   struct Results;
+  
+  namespace EndNode {
+    struct MeanNormalModel;
+  }
 }
 
 extern "C" {
@@ -50,11 +54,17 @@ extern "C" {
   void dbarts_initializeCGMPriorFromOptions(dbarts::CGMPrior* prior, double base, double power);
   void dbarts_invalidateCGMPrior(dbarts::CGMPrior* prior);
   
-  dbarts::NormalPrior* dbarts_createNormalPrior();
+  /* dbarts::NormalPrior* dbarts_createNormalPrior();
   dbarts::NormalPrior* dbarts_createNormalPriorFromOptions(const dbarts::Control* control, double k);
   void dbarts_destroyNormalPrior(dbarts::NormalPrior* prior);
   void dbarts_initializeNormalPriorFromOptions(dbarts::NormalPrior* prior, const dbarts::Control* control, double k);
-  void dbarts_invalidateNormalPrior(dbarts::NormalPrior* prior);
+  void dbarts_invalidateNormalPrior(dbarts::NormalPrior* prior); */
+  
+  dbarts::EndNode::MeanNormalModel* dbarts_createMeanNormalModel();
+  dbarts::EndNode::MeanNormalModel* dbarts_createMeanNormalModelFromOptions(const dbarts::Control* control, double k);
+  void dbarts_destroyMeanNormalModel(dbarts::EndNode::MeanNormalModel* model);
+  void dbarts_initializeMeanNormalModelFromOptions(dbarts::EndNode::MeanNormalModel* model, const dbarts::Control* control, double k);
+  void dbarts_invalidateMeanNormalModel(dbarts::EndNode::MeanNormalModel* model);
   
   dbarts::ChiSquaredPrior* dbarts_createChiSquaredPrior();
   dbarts::ChiSquaredPrior* dbarts_createChiSquaredPriorFromOptions(double degreesOfFreedom, double quantile);

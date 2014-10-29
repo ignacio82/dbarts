@@ -11,6 +11,7 @@
 #include "control.hpp"
 #include "data.hpp"
 #include "model.hpp"
+#include "endNodeModel.hpp"
 #include "scratch.hpp"
 #include "state.hpp"
 

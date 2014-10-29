@@ -71,7 +71,7 @@ namespace dbarts {
     
     *stepTaken = false;
     
-    NodeVector notBottomNodes(tree.getNotBottomNodes());
+    NodeVector notBottomNodes(tree.getNotBottomVector());
     size_t numNotBottomNodes = notBottomNodes.size();
     
     // get list of nodes with rule = nodes which are not bottom

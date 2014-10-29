@@ -87,7 +87,7 @@ namespace {
 namespace {
   using namespace dbarts;
   
-  size_t readNode(Node& node, const char* treeString, size_t numPredictors) {
+  size_t readNode(const BARTFit& fit, Node& node, const char* treeString, size_t numPredictors) {
     if (treeString[0] == '\0') return 0;
     if (treeString[0] == '.') return 1;
     
@@ -123,11 +123,11 @@ namespace {
     if (node.p.rule.splitIndex == 0 && errno != 0)
       ext_throwError("Unable to parse tree string: %s", strerror(errno));
     
-    node.leftChild  = new Node(node, numPredictors);
-    node.p.rightChild = new Node(node, numPredictors);
+    node.leftChild  = createNode(fit, node);
+    node.p.rightChild = createNode(fit, node);
     
-    pos += readNode(*node.getLeftChild(), treeString + pos, numPredictors);
-    pos += readNode(*node.getRightChild(), treeString + pos, numPredictors);
+    pos += readNode(fit, *node.getLeftChild(), treeString + pos, numPredictors);
+    pos += readNode(fit, *node.getRightChild(), treeString + pos, numPredictors);
     
     return pos;
   }
@@ -145,7 +145,7 @@ namespace dbarts {
       writer.length = BASE_BUFFER_SIZE;
       writer.pos = 0;
       
-      writer.writeNode(trees[i].top);
+      writer.writeNode(*NODE_AT(trees, i, fit.scratch.nodeSize));
      
       writer.writeChar('\0');
       
@@ -158,11 +158,11 @@ namespace dbarts {
   void State::recreateTreesFromStrings(const BARTFit& fit, const char* const* treeStrings)
   {
     for (size_t i = 0; i < fit.control.numTrees; ++i) {
-      trees[i].top.clear();
-      readNode(trees[i].top, treeStrings[i], fit.data.numPredictors);
-      updateVariablesAvailable(fit, trees[i].top, trees[i].top.p.rule.variableIndex);
+      NODE_AT(trees, i, fit.scratch.nodeSize)->clear(fit);
+      readNode(fit, *NODE_AT(trees, i, fit.scratch.nodeSize), treeStrings[i], fit.data.numPredictors);
+      updateVariablesAvailable(fit, trees[i], trees[i].p.rule.variableIndex);
       
-      trees[i].top.addObservationsToChildren(fit);
+      NODE_AT(trees, i, fit.scratch.nodeSize)->addObservationsToChildren(fit);
     }
   }
 }

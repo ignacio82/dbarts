@@ -158,7 +158,7 @@ namespace dbarts {
   // transition mechanism
   double computeProbabilityOfBirthStep(const BARTFit& fit, const Tree& tree)
   {
-    NodeVector bottomNodes(tree.getBottomNodes());
+    NodeVector bottomNodes(tree.getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     bool birthableNodeExists = false;
@@ -187,7 +187,7 @@ namespace dbarts {
   
   double computeProbabilityOfSelectingNodeForDeath(const Tree& tree)
   {
-    size_t numNodesWhoseChildrenAreBottom = tree.getNumNodesWhoseChildrenAreBottom();
+    size_t numNodesWhoseChildrenAreBottom = tree.getNumNoGrandNodes();
     if (numNodesWhoseChildrenAreBottom == 0) return 0.0;
     
     return 1.0 / (double) numNodesWhoseChildrenAreBottom;
@@ -197,7 +197,7 @@ namespace dbarts {
   {
     if (tree.hasSingleNode()) return 1.0;
     
-    NodeVector bottomNodes(tree.getBottomNodes());
+    NodeVector bottomNodes(tree.getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     double totalProbability = 0.0;
@@ -222,7 +222,7 @@ namespace dbarts {
     }
 #endif
     
-    NodeVector bottomNodes(tree.getBottomNodes());
+    NodeVector bottomNodes(tree.getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     double* nodeBirthProbabilities = ext_stackAllocate(numBottomNodes, double);
@@ -251,7 +251,7 @@ namespace dbarts {
   
   Node* drawChildrenKillableNode(const BARTFit& fit, const Tree& tree, double* nodeSelectionProbability)
   {
-    NodeVector nodesWhoseChildrenAreBottom(tree.getNodesWhoseChildrenAreAtBottom());
+    NodeVector nodesWhoseChildrenAreBottom(tree.getNoGrandVector());
     size_t numNodesWhoseChildrenAreBottom = nodesWhoseChildrenAreBottom.size();
     
     if (numNodesWhoseChildrenAreBottom == 0) {

@@ -22,7 +22,8 @@ struct ext_rng;
 
 namespace dbarts {
   struct TreePrior;
-  struct EndNodePrior;
+//  struct EndNodePrior;
+  namespace EndNode { struct Model; }
   struct ResidualVariancePrior;
   
   struct Model {
@@ -33,14 +34,16 @@ namespace dbarts {
     double birthProbability;
     
     TreePrior* treePrior;
-    EndNodePrior* muPrior;
+    EndNode::Model* endNodeModel;
+//    EndNodePrior* muPrior;
     ResidualVariancePrior* sigmaSqPrior;
     
     Model() : 
       birthOrDeathProbability(DBARTS_BIRTH_OR_DEATH_PROBABILITY),
       swapProbability(DBARTS_SWAP_PROBABILITY),
       changeProbability(DBARTS_CHANGE_PROBABILITY),
-      birthProbability(DBARTS_BIRTH_PROBABILITY), treePrior(NULL), muPrior(NULL), sigmaSqPrior(NULL)
+//      birthProbability(DBARTS_BIRTH_PROBABILITY), treePrior(NULL), muPrior(NULL), sigmaSqPrior(NULL)
+      birthProbability(DBARTS_BIRTH_PROBABILITY), treePrior(NULL), endNodeModel(NULL), sigmaSqPrior(NULL)
     {
     }
   };
@@ -66,12 +69,12 @@ namespace dbarts {
     virtual ~TreePrior() { }
   };
   
-  struct EndNodePrior {
+  /* struct EndNodePrior {
     virtual double computeLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* y, double residualVariance) const = 0;
     virtual double drawFromPosterior(ext_rng* rng, double ybar, double numEffectiveObservations, double residualVariance) const = 0;
     
     virtual ~EndNodePrior() { }
-  };
+  }; */
   
   // the virtual scale accessors are for the conditional bart, which can have its data rescaled
   // if your prior doesn't use them, ignore them
@@ -107,7 +110,7 @@ namespace dbarts {
   };
   
   // nodeMu ~ normal(0, 1 / precision)
-  struct NormalPrior : EndNodePrior {
+  /* struct NormalPrior : EndNodePrior {
     double precision;
     
     NormalPrior() : precision(1.0) { }
@@ -116,7 +119,7 @@ namespace dbarts {
     
     virtual double computeLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* y, double residualVariance) const;
     virtual double drawFromPosterior(ext_rng* rng, double ybar, double numEffectiveObservations, double residualVariance) const;
-  };
+  }; */
   
   // sigmaSq ~ chisq(df, scale)
   struct ChiSquaredPrior : ResidualVariancePrior {

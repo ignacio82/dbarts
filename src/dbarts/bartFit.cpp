@@ -130,25 +130,27 @@ namespace dbarts {
     bool treesAreValid = true;
     size_t treeNum = 0;
     for ( ; treeNum < control.numTrees && treesAreValid == true; ++treeNum) {
+      Tree& tree_i(*TREE_AT(state.trees, treeNum, scratch.nodeSize));
       const double* treeFits = state.treeFits + treeNum * data.numObservations;
       
       // next allocates memory
-      nodePosteriorPredictions[treeNum] = state.trees[treeNum].recoverAveragesFromFits(*this, treeFits);
+      nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      state.trees[treeNum].top.addObservationsToChildren(*this);
+      tree_i.addObservationsToChildren(*this);
       
-      treesAreValid &= state.trees[treeNum].isValid();
+      treesAreValid &= tree_i.isValid();
     }
     
     
     if (treesAreValid) {
       // go back across bottoms and set predictions to those mus for obs now in node
       for (size_t i = 0; i < control.numTrees; ++i) {
+      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
         double* treeFits = state.treeFits + i * data.numObservations;
         
         ext_addVectorsInPlace(treeFits, data.numObservations, -1.0, state.totalFits);
         
-        state.trees[i].setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
+        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
         
         ext_addVectorsInPlace(treeFits, data.numObservations, 1.0, state.totalFits);
       }
@@ -200,13 +202,14 @@ namespace dbarts {
     
     size_t treeNum;
     for (treeNum = 0; treeNum < control.numTrees && treesAreValid == true; ++treeNum) {
+      Tree& tree_i(*TREE_AT(state.trees, treeNum, scratch.nodeSize));
       const double* treeFits = state.treeFits + treeNum * data.numObservations;
       
-      nodePosteriorPredictions[treeNum] = state.trees[treeNum].recoverAveragesFromFits(*this, treeFits);
+      nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      state.trees[treeNum].top.addObservationsToChildren(*this);
+      tree_i.addObservationsToChildren(*this);
       
-      treesAreValid &= state.trees[treeNum].isValid();
+      treesAreValid &= tree_i.isValid();
     }
     
     
@@ -221,16 +224,17 @@ namespace dbarts {
         }
       }
       
-      for (size_t i = 0; i < treeNum; ++i) state.trees[i].top.addObservationsToChildren(*this);
+      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->addObservationsToChildren(*this);
     } else {
       
       // go back across bottoms and set predictions to those mus for obs now in node
       for (size_t i = 0; i < control.numTrees; ++i) {
+        Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
         double* treeFits = state.treeFits + i * data.numObservations;
         
         ext_addVectorsInPlace(treeFits, data.numObservations, -1.0, state.totalFits);
         
-        state.trees[i].setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
+        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
         
         ext_addVectorsInPlace(treeFits, data.numObservations, 1.0, state.totalFits);
       }
@@ -290,11 +294,12 @@ namespace dbarts {
       ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
     
       for (size_t i = 0; i < control.numTrees; ++i) {
+        Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
         const double* treeFits = state.treeFits + i * data.numObservations;
       
-        const double* nodePosteriorPredictions = state.trees[i].recoverAveragesFromFits(*this, treeFits);
+        const double* nodePosteriorPredictions = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-        state.trees[i].setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
+        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
       
         ext_addVectorsInPlace(currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
         
@@ -327,11 +332,12 @@ namespace dbarts {
     ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
     
     for (size_t i = 0; i < control.numTrees; ++i) {
+      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
       const double* treeFits = state.treeFits + i * data.numObservations;
       
-      const double* nodePosteriorPredictions = state.trees[i].recoverAveragesFromFits(*this, treeFits);
+      const double* nodePosteriorPredictions = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      state.trees[i].setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
+      tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
       
       ext_addVectorsInPlace(currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
       
@@ -344,6 +350,14 @@ namespace dbarts {
   BARTFit::BARTFit(Control control, Model model, Data data) :
     control(control), model(model), data(data), scratch(), state(), threadManager(NULL)
   {
+    if (model.endNodeModel->perNodeScratchSize <= sizeof(ParentMembers)) {
+      scratch.nodeSize = sizeof(Node);
+    } else {
+      // however many chars the parent members are in from the root is the base
+      ptrdiff_t signedNodeSize = ((char*) &((Node*) NULL)->p - (char*) NULL);
+      scratch.nodeSize = (size_t) (signedNodeSize >= 0 ? signedNodeSize : -signedNodeSize) + model.endNodeModel->perNodeScratchSize;
+    }
+    
     allocateMemory(*this);
 
     setPrior(*this);
@@ -368,7 +382,8 @@ namespace dbarts {
     }
     delete [] scratch.cutPoints; scratch.cutPoints = NULL;
     
-    if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; ) state.trees[--i].~Tree();
+    // if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; ) state.trees[--i].~Tree();
+    if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; --i) invalidateNode(*NODE_AT(state.trees, i - 1, scratch.nodeSize));
     ::operator delete (state.trees); state.trees = NULL;
     delete [] state.treeIndices; state.treeIndices = NULL;
     
@@ -432,6 +447,7 @@ namespace dbarts {
       
 
       for (size_t i = 0; i < control.numTrees; ++i) {
+        Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
         double* oldTreeFits = state.treeFits + i * data.numObservations;
         
         // treeY = y - (totalFits - oldTreeFits)
@@ -440,7 +456,7 @@ namespace dbarts {
         ext_addVectorsInPlace((const double*) state.totalFits, data.numObservations, -1.0, scratch.treeY);
         ext_addVectorsInPlace((const double*) oldTreeFits, data.numObservations, 1.0, scratch.treeY);
         
-        state.trees[i].setNodeAverages(*this, scratch.treeY);
+        tree_i.updateBottomNodesWithResiduals(*this, scratch.treeY);
         
         /* if (k == 1 && i <= 1) {
           ext_printf("**before:\n");
@@ -454,7 +470,7 @@ namespace dbarts {
           }
         } */
         // ext_printf("iter %lu, tree %lu: ", k + 1, i + 1);
-        metropolisJumpForTree(*this, state.trees[i], scratch.treeY, &stepTaken, &ignored);
+        metropolisJumpForTree(*this, tree_i, scratch.treeY, &stepTaken, &ignored);
         /* if (k == 1 && i <= 3) {
          ext_printf("**after:\n");
           state.trees[i].top.print(*this);
@@ -468,7 +484,7 @@ namespace dbarts {
         } */
         // state.trees[i].top.print(*this);
         
-        state.trees[i].sampleAveragesAndSetFits(*this, currFits, isThinningIteration ? NULL : currTestFits);
+        tree_i.sampleAveragesAndSetFits(*this, currFits, isThinningIteration ? NULL : currTestFits);
         
         // totalFits += currFits - oldTreeFits
         ext_addVectorsInPlace((const double*) oldTreeFits, data.numObservations, -1.0, state.totalFits);
@@ -550,7 +566,7 @@ namespace {
     
     ext_printf("Prior:\n");
     // dirty hack... should have priors print themselves
-    double sigma = std::sqrt(1.0 / static_cast<NormalPrior*>(model.muPrior)->precision);
+    double sigma = std::sqrt(1.0 / static_cast<EndNode::MeanNormalModel*>(model.endNodeModel)->precision);
     double k = (control.responseIsBinary ? 3.0 : 0.5) /  (sigma * std::sqrt((double) control.numTrees));
     ext_printf("\tk: %f\n", k);
     if (!control.responseIsBinary) {
@@ -614,7 +630,7 @@ namespace {
     
     ext_printf("\nTree sizes, last iteration:\n");
     for (size_t i = 0; i < fit.control.numTrees; ++i) {
-      ext_printf("%u ", fit.state.trees[i].getNumBottomNodes());
+      ext_printf("%u ", TREE_AT(fit.state.trees, i, fit.scratch.nodeSize)->getNumBottomNodes());
       if ((i + 1) % 20 == 0) ext_printf("\n");
     }
     ext_printf("\n");
@@ -676,7 +692,8 @@ namespace {
     state.treeIndices = new size_t[data.numObservations * control.numTrees];
     
     for (size_t i = 0; i < control.numTrees; ++i) {
-      new (state.trees + i) Tree(state.treeIndices + i * data.numObservations, data.numObservations, data.numPredictors);
+      // new (state.trees + i) Tree(state.treeIndices + i * data.numObservations, data.numObservations, data.numPredictors);
+      initializeNode(*NODE_AT(state.trees, i, fit.scratch.nodeSize), fit, state.treeIndices + i * data.numObservations, data.numObservations);
     }
     
     if (control.numThreads > 1 && ext_mt_create(&fit.threadManager, control.numThreads) != 0) {
@@ -990,7 +1007,7 @@ namespace {
     for (size_t i = 0; i < fit.data.numPredictors; ++i) variableCounts[i] = 0;
     
     for (size_t i = 0; i < fit.control.numTrees; ++i) {
-      fit.state.trees[i].countVariableUses(variableCounts);
+      TREE_AT(fit.state.trees, i, fit.scratch.nodeSize)->countVariableUses(variableCounts);
     }
   }
 
@@ -1045,7 +1062,7 @@ namespace dbarts {
     if (writeData(data, &bio) == false) goto save_failed;
     ext_printf("wrote model\n");
     
-    if (writeState(state, &bio, control, data) == false) goto save_failed;
+    if (writeState(*this, &bio) == false) goto save_failed;
     ext_printf("wrote state\n");
     
     ext_bio_invalidate(&bio);
@@ -1088,7 +1105,7 @@ save_failed:
     
     result = new BARTFit(control, model, data);
     
-    if (readState(result->state, &bio, result->control, result->data) == false) goto load_failed;
+    if (readState(*result, &bio) == false) goto load_failed;
     ext_printf("read state\n");
     
     ext_bio_invalidate(&bio);
@@ -1106,7 +1123,8 @@ load_failed:
     delete [] data.variableTypes;
       
     delete model.sigmaSqPrior;
-    delete model.muPrior;
+//    delete model.muPrior;
+    delete model.endNodeModel;
     delete model.treePrior;
     
     return NULL;

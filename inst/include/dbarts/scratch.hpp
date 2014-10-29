@@ -3,6 +3,7 @@
 #define DBARTS_SCRATCH_HPP
 
 #include "cstdint.hpp" // int types
+#include <cstddef> // size_t
 
 namespace dbarts {
   struct ScaleFactor { double min, max, range; };
@@ -17,6 +18,8 @@ namespace dbarts {
     
     const std::uint32_t* numCutsPerVariable;
     const double* const* cutPoints;
+    
+    std::size_t nodeSize;
   };
 } // namespace dbarts
 

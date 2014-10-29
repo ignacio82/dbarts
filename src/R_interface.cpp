@@ -13,6 +13,7 @@
 #include <dbarts/bartFit.hpp>
 #include <dbarts/control.hpp>
 #include <dbarts/data.hpp>
+#include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
 #include <dbarts/results.hpp>
 #include <dbarts/types.hpp>
@@ -312,7 +313,8 @@ namespace {
     delete [] fit->data.variableTypes;
       
     delete fit->model.sigmaSqPrior;
-    delete fit->model.muPrior;
+//    delete fit->model.muPrior;
+    delete fit->model.endNodeModel;
     delete fit->model.treePrior;
     
     delete fit;
@@ -810,11 +812,11 @@ namespace {
     { "dbarts", "initializeCGMPriorFromOptions", (DL_FUNC) dbarts_initializeCGMPriorFromOptions },
     { "dbarts", "invalidateCGMPrior", (DL_FUNC) dbarts_invalidateCGMPrior },
     
-    { "dbarts", "createNormalPrior", (DL_FUNC) dbarts_createNormalPrior },
-    { "dbarts", "createNormalPriorFromOptions", (DL_FUNC) dbarts_createNormalPriorFromOptions },
-    { "dbarts", "destroyNormalPrior", (DL_FUNC) dbarts_destroyNormalPrior },
-    { "dbarts", "initializeNormalPriorFromOptions", (DL_FUNC) dbarts_initializeNormalPriorFromOptions },
-    { "dbarts", "invalidateNormalPrior", (DL_FUNC) dbarts_invalidateNormalPrior },
+    { "dbarts", "createMeanNormalModel", (DL_FUNC) dbarts_createMeanNormalModel },
+    { "dbarts", "createMeanNormalModelFromOptions", (DL_FUNC) dbarts_createMeanNormalModelFromOptions },
+    { "dbarts", "destroyMeanNormalModel", (DL_FUNC) dbarts_destroyMeanNormalModel },
+    { "dbarts", "initializeMeanNormalModelFromOptions", (DL_FUNC) dbarts_initializeMeanNormalModelFromOptions },
+    { "dbarts", "invalidateMeanNormalModel", (DL_FUNC) dbarts_invalidateMeanNormalModel },
     
     { "dbarts", "createChiSquaredPrior", (DL_FUNC) dbarts_createChiSquaredPrior },
     { "dbarts", "createChiSquaredPriorFromOptions", (DL_FUNC) dbarts_createChiSquaredPriorFromOptions },
@@ -1074,7 +1076,8 @@ namespace {
     d_temp = REAL(slotExpr)[0];
     if (ISNAN(d_temp)) error("k must be a real number.");
     if (d_temp <= 0.0) error("k must be positive.");
-    model.muPrior = new NormalPrior(control, d_temp);
+    model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
+//    model.muPrior = new NormalPrior(control, d_temp);
     
     
     
@@ -1303,7 +1306,8 @@ namespace {
     ext_rng_destroy(fit->control.rng);
     
     delete fit->model.treePrior;
-    delete fit->model.muPrior;
+//    delete fit->model.muPrior;
+    delete fit->model.endNodeModel;
     delete fit->model.sigmaSqPrior;
     
     delete [] fit->data.variableTypes;

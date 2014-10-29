@@ -60,7 +60,7 @@ namespace dbarts {
     double alpha = 0.0; // note backout = (alpha = -1)
     *stepTaken = false;
     
-    NodeVector swappableNodes(tree.getSwappableNodes());
+    NodeVector swappableNodes(tree.getSwappableVector());
     size_t numSwappableNodes = swappableNodes.size();
     
     //if there are no swappable rule back out

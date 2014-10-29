@@ -44,7 +44,7 @@ namespace dbarts {
   
   double CGMPrior::computeTreeLogProbability(const BARTFit& fit, const Tree& tree) const
   {
-    return ::computeTreeLogProbability(*this, fit, tree.top);
+    return ::computeTreeLogProbability(*this, fit, tree);
   }
   
   double CGMPrior::computeSplitVariableLogProbability(const BARTFit& fit, const Node& node) const

@@ -7,8 +7,7 @@ namespace dbarts {
   struct Control;
   struct Data;
   struct Model;
-  struct Scratch;
-  struct State;
+  struct BARTFit;
   
   bool writeControl(const Control& control, ext_binaryIO* bio);
   bool readControl(Control& control, ext_binaryIO* bio);
@@ -19,8 +18,8 @@ namespace dbarts {
   bool writeModel(const Model& model, ext_binaryIO* bio);
   bool readModel(Model& model, ext_binaryIO* bio);
   
-  bool writeState(const State& state, ext_binaryIO* bio, const Control& control, const Data& data);
-  bool readState(State& state, ext_binaryIO* bio, const Control& control, const Data& data);
+  bool writeState(const BARTFit& fit, ext_binaryIO* bio);
+  bool readState(BARTFit& fit, ext_binaryIO* bio);
 }
 
 #endif // DBARTS_BINARY_IO_HPP

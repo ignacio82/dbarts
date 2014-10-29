@@ -12,11 +12,15 @@
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/data.hpp>
-#include <dbarts/model.hpp>
+// #include <dbarts/model.hpp>
+#include <dbarts/endNodeModel.hpp>
 #include <dbarts/scratch.hpp>
 #include "functions.hpp"
 
 using std::uint64_t;
+
+#define _M_ (*((EndNodeMembers*) &p))
+#define _MX_(_X_) (*((EndNodeMembers*) &(_X_).p))
 
 namespace dbarts {
   
@@ -75,21 +79,21 @@ namespace dbarts {
   }
   
   
-  void Node::clearObservations()
+  void Node::clearObservations(const BARTFit& fit)
   {
     if (!isTop()) {
       observationIndices = NULL;
       numObservations = 0;
     }
     if (!isBottom()) {
-      leftChild->clearObservations();
-      p.rightChild->clearObservations();
+      leftChild->clearObservations(fit);
+      p.rightChild->clearObservations(fit);
     } else {
-      m.average = 0.0;
+      fit.model.endNodeModel->clearScratch(*this);
     }
   }
   
-  void Node::clear()
+  void Node::clear(const BARTFit& fit)
   {
     if (!isBottom()) {
       delete leftChild;
@@ -98,10 +102,10 @@ namespace dbarts {
       leftChild = NULL;
       p.rule.invalidate();
     }
-    clearObservations();
+    clearObservations(fit);
   }
   
-  Node::Node(size_t* observationIndices, size_t numObservations, size_t numPredictors) :
+/*  Node::Node(size_t* observationIndices, size_t numObservations, size_t numPredictors) :
     parent(NULL), leftChild(NULL), enumerationIndex(BART_INVALID_NODE_ENUM), variablesAvailableForSplit(NULL),
     observationIndices(observationIndices), numObservations(numObservations)
   {
@@ -124,6 +128,62 @@ namespace dbarts {
       delete p.rightChild; p.rightChild = NULL;
     }
     delete [] variablesAvailableForSplit; variablesAvailableForSplit = NULL;
+  } */
+  
+  Node* createNode(const BARTFit& fit, size_t* observationIndices, size_t numObservations)
+  {
+    Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
+
+    initializeNode(*result, fit, observationIndices, numObservations);
+
+    return result;
+  }
+
+  Node* createNode(const BARTFit& fit, const Node& parent)
+  {
+    Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
+    result->parent = const_cast<Node*>(&parent);
+    result->leftChild = NULL;
+    result->enumerationIndex = BART_INVALID_NODE_ENUM;
+
+    result->observationIndices = NULL;
+    result->numObservations = 0;
+
+    result->variablesAvailableForSplit = new bool[fit.data.numPredictors];
+    std::memcpy(result->variablesAvailableForSplit, parent.variablesAvailableForSplit, sizeof(bool) * fit.data.numPredictors);
+    
+    return result;
+  }
+
+  void initializeNode(Node& node, const BARTFit& fit, size_t* observationIndices, size_t numObservations)
+  {
+    node.parent = NULL;
+    node.leftChild = NULL;
+    node.enumerationIndex = BART_INVALID_NODE_ENUM;
+
+    node.observationIndices = observationIndices;
+    node.numObservations = numObservations;
+
+    node.variablesAvailableForSplit = new bool[fit.data.numPredictors];
+    for (size_t i = 0; i < fit.data.numPredictors; ++i) node.variablesAvailableForSplit[i] = true;
+  }
+
+  void deleteNode(Node* node)
+  {
+    invalidateNode(*node);
+
+    ::operator delete (node);
+  }
+  
+  void invalidateNode(Node& node)
+  {
+    if (node.leftChild != NULL) {
+      deleteNode(node.leftChild);
+      deleteNode(node.p.rightChild);
+    } else {
+      // model related cleaning, maybe
+    }
+    delete [] node.variablesAvailableForSplit; node.variablesAvailableForSplit = NULL;
   }
   
   void Node::copyFrom(const BARTFit& fit, const Node& other)
@@ -133,10 +193,8 @@ namespace dbarts {
     if (leftChild != NULL) {
       p.rightChild = other.p.rightChild;
       p.rule.copyFrom(other.p.rule);
-    }
-    else {
-      m.average = other.m.average;
-      m.numEffectiveObservations = other.m.numEffectiveObservations;
+    } else {
+      fit.model.endNodeModel->copyScratch(*this, other);
     }
     
     enumerationIndex = other.enumerationIndex;
@@ -169,7 +227,7 @@ namespace dbarts {
         ext_printf("ORDRule: (%d)=%f", p.rule.splitIndex, p.rule.getSplitValue(fit));
       }
     } else {
-      ext_printf(" ave: %f", m.average);
+      fit.model.endNodeModel->printScratch(*this);
     }
     ext_printf("\n");
     
@@ -499,28 +557,33 @@ namespace {
 
 namespace dbarts {
   void Node::addObservationsToChildren(const BARTFit& fit, const double* y) {
-    if (isBottom()) {
+    /* if (isBottom()) {
       if (isTop()) {
         if (fit.data.weights == NULL) {
-          m.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
-          m.numEffectiveObservations = (double) numObservations;
+          _M_.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
+          _M_.numEffectiveObservations = (double) numObservations;
         } else {
-          m.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &m.numEffectiveObservations);
+          _M_.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
         }
       } else {
         if (fit.data.weights == NULL) {
-          m.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
-          m.numEffectiveObservations = (double) numObservations;
+          _M_.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
+          _M_.numEffectiveObservations = (double) numObservations;
         } else {
-          m.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &m.numEffectiveObservations);
+          _M_.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
         }
       }
       
       return;
+    } */
+    
+    if (isBottom()) {
+      fit.model.endNodeModel->updateScratchWithResiduals(fit, *this, y);
+      return;
     }
     
-    leftChild->clearObservations();
-    p.rightChild->clearObservations();
+    leftChild->clearObservations(fit);
+    p.rightChild->clearObservations(fit);
     
     /*size_t numThreads, numElementsPerThread;
     ext_mt_getNumThreadsForJob(fit.threadManager, numObservations, MIN_NUM_OBSERVATIONS_IN_NODE_PER_THREAD,
@@ -579,12 +642,12 @@ namespace dbarts {
   
   void Node::addObservationsToChildren(const BARTFit& fit) {
     if (isBottom()) {
-      m.average = 0.0;
+      fit.model.endNodeModel->clearScratch(*this);
       return;
     }
     
-    leftChild->clearObservations();
-    p.rightChild->clearObservations();
+    leftChild->clearObservations(fit);
+    p.rightChild->clearObservations(fit);
     
     size_t numOnLeft = 0;
     if (numObservations > 0) {
@@ -604,34 +667,36 @@ namespace dbarts {
     p.rightChild->addObservationsToChildren(fit);
   }
 	
-  void Node::setAverage(const BARTFit& fit, const double* y)
+  void Node::updateScratchWithResiduals(const BARTFit& fit, const double* r)
   {
     leftChild = NULL;
-        
-    if (isTop()) {
+    
+    fit.model.endNodeModel->updateScratchWithResiduals(fit, *this, r);
+    
+    /* if (isTop()) {
       if (fit.data.weights == NULL) {
-        m.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
-        m.numEffectiveObservations = (double) numObservations;
+        _M_.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
+        _M_.numEffectiveObservations = (double) numObservations;
       }
-      else m.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &m.numEffectiveObservations);
+      else _M_.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
     } else {
       if (fit.data.weights == NULL) {
-        m.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
-        m.numEffectiveObservations = (double) numObservations;
+        _M_.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
+        _M_.numEffectiveObservations = (double) numObservations;
       }
-      else m.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &m.numEffectiveObservations);
-    }
+      else _M_.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
+    } */
   }
   
-  void Node::setAverages(const BARTFit& fit, const double* y)
+  void Node::updateScratchesWithResiduals(const BARTFit& fit, const double* r)
   {
     if (isBottom()) {
-      setAverage(fit, y);
+      updateScratchWithResiduals(fit, r);
       return;
     }
     
-    leftChild->setAverages(fit, y);
-    p.rightChild->setAverages(fit, y);
+    leftChild->updateScratchesWithResiduals(fit, r);
+    p.rightChild->updateScratchesWithResiduals(fit, r);
   }
 
   double Node::computeVariance(const BARTFit& fit, const double* y) const
@@ -651,11 +716,13 @@ namespace dbarts {
     }
   }
   
-  double Node::drawFromPosterior(ext_rng* rng, const EndNodePrior& endNodePrior, double residualVariance) const
+  double Node::drawFromPosterior(ext_rng* rng, const EndNode::Model& endNodeModel, double residualVariance) const
+//  double Node::drawFromPosterior(ext_rng* rng, const EndNodePrior& endNodePrior, double residualVariance) const
   {
     if (getNumObservations() == 0) return 0.0;
-      
-    return endNodePrior.drawFromPosterior(rng, getAverage(), getNumEffectiveObservations(), residualVariance);
+    
+    
+    return endNodeModel.drawFromPosterior(endNodeModel, rng, getAverage(), getNumEffectiveObservations(), residualVariance);
   }
   
   // these could potentially be multithreaded, but the gains are probably minimal
@@ -704,8 +771,10 @@ namespace dbarts {
     
     p.rule = newRule;
     
-    leftChild    = new Node(*this, fit.data.numPredictors);
-    p.rightChild = new Node(*this, fit.data.numPredictors);
+//    leftChild    = new Node(*this, fit.data.numPredictors);
+//    p.rightChild = new Node(*this, fit.data.numPredictors);
+    leftChild    = createNode(fit, *this);
+    p.rightChild = createNode(fit, *this);
     
     if (exhaustedLeftSplits)     leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
@@ -715,14 +784,14 @@ namespace dbarts {
 
   void Node::orphanChildren() {
     // do this w/o clobbering children pointers until details are nailed down
-    double numEffectiveObservations = leftChild->m.numEffectiveObservations + p.rightChild->m.numEffectiveObservations;
+    double numEffectiveObservations = _MX_(*leftChild).numEffectiveObservations + _MX_(*p.rightChild).numEffectiveObservations;
     
-    double average = leftChild->m.average * (leftChild->m.numEffectiveObservations / numEffectiveObservations) +
-                     p.rightChild->m.average * (p.rightChild->m.numEffectiveObservations / numEffectiveObservations);
+    double average = _MX_(*leftChild).average * (_MX_(*leftChild).numEffectiveObservations / numEffectiveObservations) +
+                     _MX_(*p.rightChild).average * (_MX_(*p.rightChild).numEffectiveObservations / numEffectiveObservations);
     
     leftChild = NULL;
-    m.average = average;
-    m.numEffectiveObservations = numEffectiveObservations;
+    _M_.average = average;
+    _M_.numEffectiveObservations = numEffectiveObservations;
   }
   
   void Node::countVariableUses(uint32_t* variableCounts) const

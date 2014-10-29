@@ -37,19 +37,17 @@ namespace {
 }
 
 namespace dbarts {
-  void Tree::setNodeAverages(const BARTFit& fit, const double* y) {
-    NodeVector bottomNodes(getBottomNodes());
+  void Tree::updateBottomNodesWithResiduals(const BARTFit& fit, const double* r) {
+    NodeVector bottomNodes(getBottomVector());
     
     size_t numBottomNodes = bottomNodes.size();
     
-    for (size_t i = 0; i < numBottomNodes; ++i) {
-      bottomNodes[i]->setAverage(fit, y);
-    }
+    for (size_t i = 0; i < numBottomNodes; ++i) bottomNodes[i]->updateScratchWithResiduals(fit, r);
   }
   
   void Tree::sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits)
   {
-    NodeVector bottomNodes(top.getAndEnumerateBottomVector());
+    NodeVector bottomNodes(getAndEnumerateBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     double* nodePosteriorPredictions = NULL;
@@ -59,14 +57,14 @@ namespace dbarts {
     for (size_t i = 0; i < numBottomNodes; ++i) {
       const Node& bottomNode(*bottomNodes[i]);
       
-      double posteriorPrediction = bottomNode.drawFromPosterior(fit.control.rng, *fit.model.muPrior, fit.state.sigma * fit.state.sigma);
+      double posteriorPrediction = bottomNode.drawFromPosterior(fit.control.rng, *fit.model.endNodeModel, fit.state.sigma * fit.state.sigma);
       bottomNode.setPredictions(trainingFits, posteriorPrediction);
       
       if (testFits != NULL) nodePosteriorPredictions[i] = posteriorPrediction;
     }
     
     if (testFits != NULL) {
-      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, top, fit.scratch.Xt_test, fit.data.numTestObservations);
+      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
       for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = nodePosteriorPredictions[observationNodeMap[i]];
       delete [] observationNodeMap;
       
@@ -76,7 +74,7 @@ namespace dbarts {
   
   double* Tree::recoverAveragesFromFits(const BARTFit&, const double* treeFits)
   {
-    NodeVector bottomNodes(top.getBottomVector());
+    NodeVector bottomNodes(getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     double* result = new double[numBottomNodes];
@@ -95,7 +93,7 @@ namespace dbarts {
   
   void Tree::setCurrentFitsFromAverages(const BARTFit& fit, const double* posteriorPredictions, double* trainingFits, double* testFits)
   {
-    NodeVector bottomNodes(top.getAndEnumerateBottomVector());
+    NodeVector bottomNodes(getAndEnumerateBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     if (trainingFits != NULL) {
@@ -107,18 +105,18 @@ namespace dbarts {
     }
     
     if (testFits != NULL) {
-      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, top, fit.scratch.Xt_test, fit.data.numTestObservations);
+      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
       for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = posteriorPredictions[observationNodeMap[i]];
       delete [] observationNodeMap;
     }
   }
   
-  void Tree::countVariableUses(uint32_t* variableCounts) {
-    top.countVariableUses(variableCounts);
-  }
+  /* void Tree::countVariableUses(uint32_t* variableCounts) {
+    countVariableUses(variableCounts);
+  } */
   
   bool Tree::isValid() const {
-    const NodeVector bottomNodes(top.getBottomVector());
+    const NodeVector bottomNodes(getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
     for (size_t j = 0; j < numBottomNodes; ++j) {

@@ -5,6 +5,7 @@
 #include <cmath>
 
 #include <dbarts/bartFit.hpp>
+#include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
 #include <dbarts/results.hpp>
 
@@ -99,7 +100,7 @@ extern "C" {
     prior->~CGMPrior();
   }
   
-  NormalPrior* dbarts_createNormalPrior() {
+  /* NormalPrior* dbarts_createNormalPrior() {
     return new NormalPrior;
   }
   NormalPrior* dbarts_createNormalPriorFromOptions(const Control* control, double k) {
@@ -114,6 +115,27 @@ extern "C" {
   }
   void dbarts_invalidateNormalPrior(NormalPrior* prior) {
     prior->~NormalPrior();
+  } */
+  
+  dbarts::EndNode::MeanNormalModel* dbarts_createMeanNormalModel() {
+    return EndNode::createMeanNormalModel();
+  }
+  dbarts::EndNode::MeanNormalModel* dbarts_createMeanNormalModelFromOptions(const Control* control, double k)
+  {
+    return EndNode::createMeanNormalModel(*control, k);
+  }
+  void dbarts_destroyMeanNormalModel(EndNode::MeanNormalModel* model)
+  {
+    delete model;
+  }
+  void dbarts_initializeMeanNormalModelFromOptions(EndNode::MeanNormalModel* model, const Control* control, double k)
+  {
+    EndNode::initializeMeanNormalModel(*model, *control, k);
+  }
+  void dbarts_invalidateMeanNormalModel(EndNode::MeanNormalModel* model)
+  {
+    typedef EndNode::MeanNormalModel ThingToDestruct;
+    model->~ThingToDestruct();
   }
   
   ChiSquaredPrior* dbarts_createChiSquaredPrior() {

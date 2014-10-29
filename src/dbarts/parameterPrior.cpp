@@ -13,7 +13,7 @@ using std::size_t;
 using std::uint32_t;
 
 namespace dbarts {
-  NormalPrior::NormalPrior(const Control& control, double k)
+/*  NormalPrior::NormalPrior(const Control& control, double k)
   {
     double sigma = (control.responseIsBinary ? 3.0 : 0.5) /  (k * std::sqrt((double) control.numTrees));
     precision = 1.0 / (sigma * sigma);
@@ -44,7 +44,7 @@ namespace dbarts {
     result -= 0.5 * ((this->precision * y_bar) * (posteriorPrecision * y_bar)) / (this->precision + posteriorPrecision);
     
     return result;
-  }
+  } */
   
   ChiSquaredPrior::ChiSquaredPrior(double degreesOfFreedom, double quantile) :
     degreesOfFreedom(degreesOfFreedom),
