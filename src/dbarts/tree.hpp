@@ -36,7 +36,7 @@ namespace dbarts {
     NodeVector getNodesWhoseChildrenAreAtBottom() const;
     NodeVector getSwappableNodes() const; */
     
-    void updateBottomNodesWithResiduals(const BARTFit& fit, const double* r);
+    void updateBottomNodesWithValues(const BARTFit& fit, const double* y);
     
     // void countVariableUses(uint32_t* variableCounts);
     

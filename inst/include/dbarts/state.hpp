@@ -4,11 +4,10 @@
 #include <cstddef>
 
 namespace dbarts {
-  struct Tree;
   struct BARTFit;
   
   struct State {
-    Tree* trees;
+    void* trees;
     std::size_t* treeIndices; // numObs * numTree
     
     double* treeFits;      // numObs x numTrees;     vals for tree <=> x + i * numObs

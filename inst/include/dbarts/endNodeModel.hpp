@@ -4,6 +4,7 @@
 #include <cstddef>
 
 struct ext_rng;
+struct ext_binaryIO;
 
 namespace dbarts {
   struct BARTFit;
@@ -23,13 +24,24 @@ namespace dbarts {
       Options info;
       
       double (*computeLogIntegratedLikelihood)(const Model& model, const BARTFit& fit, const Node& node, const double* y, double residualVariance);
-      double (*drawFromPosterior)(const Model& model, ext_rng* rng, double ybar, double numEffectiveObservations, double residualVariance);
+      double (*drawFromPosterior)(const Model& model, const BARTFit& fit, const Node& node, double residualVariance);
       
       void (*clearScratch)(Node& node);
       void (*copyScratch)(Node& target, const Node& source);
       void (*printScratch)(const Node &node);
       
-      void (*updateScratchWithResiduals)(const BARTFit& fit, const Node& node, const double* r);
+      // updateScratchWithValues - just the values of y (or residuals, really) have changed
+      // updateScratchWithObservationsAndValues - the set of observations falling in the node changed as well, so our set of covariates is different
+      void (*updateScratchWithValues)(const BARTFit& fit, const Node& node, const double* y);
+      void (*updateScratchWithObservationsAndValues)(const BARTFit& fit, const Node& node, const double* y);
+      // updateScratchFromChildren - the parent is about to become the new end-node and can potentially scavenge some info from its children
+      void (*updateScratchFromChildren)(Node& parent, const Node& leftChild, const Node& rightChild);
+      
+      int (*writeScratch)(const Node& node, ext_binaryIO* bio);
+      int (*readScratch)(Node& node, ext_binaryIO* bio);
+      
+      void (*storeScratch)(const Node& node, void* target);
+      void (*restoreScratch)(Node& node, const void* source);
       
       virtual ~Model() { }
     };

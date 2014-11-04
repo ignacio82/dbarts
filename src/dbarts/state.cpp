@@ -160,9 +160,9 @@ namespace dbarts {
     for (size_t i = 0; i < fit.control.numTrees; ++i) {
       NODE_AT(trees, i, fit.scratch.nodeSize)->clear(fit);
       readNode(fit, *NODE_AT(trees, i, fit.scratch.nodeSize), treeStrings[i], fit.data.numPredictors);
-      updateVariablesAvailable(fit, trees[i], trees[i].p.rule.variableIndex);
+      updateVariablesAvailable(fit, *TREE_AT(trees, i, fit.scratch.nodeSize), TREE_AT(trees, i, fit.scratch.nodeSize)->p.rule.variableIndex);
       
-      NODE_AT(trees, i, fit.scratch.nodeSize)->addObservationsToChildren(fit);
+      NODE_AT(trees, i, fit.scratch.nodeSize)->addObservationsToChildrenAndClearScratches(fit);
     }
   }
 }

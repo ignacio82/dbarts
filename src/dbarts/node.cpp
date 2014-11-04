@@ -12,15 +12,11 @@
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/data.hpp>
-// #include <dbarts/model.hpp>
 #include <dbarts/endNodeModel.hpp>
 #include <dbarts/scratch.hpp>
 #include "functions.hpp"
 
 using std::uint64_t;
-
-#define _M_ (*((EndNodeMembers*) &p))
-#define _MX_(_X_) (*((EndNodeMembers*) &(_X_).p))
 
 namespace dbarts {
   
@@ -556,29 +552,10 @@ namespace {
 // #define MIN_NUM_OBSERVATIONS_IN_NODE_PER_THREAD 5000
 
 namespace dbarts {
-  void Node::addObservationsToChildren(const BARTFit& fit, const double* y) {
-    /* if (isBottom()) {
-      if (isTop()) {
-        if (fit.data.weights == NULL) {
-          _M_.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
-          _M_.numEffectiveObservations = (double) numObservations;
-        } else {
-          _M_.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
-        }
-      } else {
-        if (fit.data.weights == NULL) {
-          _M_.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
-          _M_.numEffectiveObservations = (double) numObservations;
-        } else {
-          _M_.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
-        }
-      }
-      
-      return;
-    } */
-    
+  void Node::addObservationsToChildrenAndUpdateValues(const BARTFit& fit, const double* y) {
+
     if (isBottom()) {
-      fit.model.endNodeModel->updateScratchWithResiduals(fit, *this, y);
+      fit.model.endNodeModel->updateScratchWithObservationsAndValues(fit, *this, y);
       return;
     }
     
@@ -636,11 +613,11 @@ namespace dbarts {
     p.rightChild->numObservations = numObservations - numOnLeft;
     
     
-    leftChild->addObservationsToChildren(fit, y);
-    p.rightChild->addObservationsToChildren(fit, y);
+    leftChild->addObservationsToChildrenAndUpdateValues(fit, y);
+    p.rightChild->addObservationsToChildrenAndUpdateValues(fit, y);
   }
   
-  void Node::addObservationsToChildren(const BARTFit& fit) {
+  void Node::addObservationsToChildrenAndClearScratches(const BARTFit& fit) {
     if (isBottom()) {
       fit.model.endNodeModel->clearScratch(*this);
       return;
@@ -663,66 +640,50 @@ namespace dbarts {
     p.rightChild->observationIndices = observationIndices + numOnLeft;
     p.rightChild->numObservations = numObservations - numOnLeft;
     
-    leftChild->addObservationsToChildren(fit);
-    p.rightChild->addObservationsToChildren(fit);
+    leftChild->addObservationsToChildrenAndClearScratches(fit);
+    p.rightChild->addObservationsToChildrenAndClearScratches(fit);
   }
 	
-  void Node::updateScratchWithResiduals(const BARTFit& fit, const double* r)
+  void Node::updateWithValues(const BARTFit& fit, const double* r)
   {
     leftChild = NULL;
     
-    fit.model.endNodeModel->updateScratchWithResiduals(fit, *this, r);
-    
-    /* if (isTop()) {
-      if (fit.data.weights == NULL) {
-        _M_.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
-        _M_.numEffectiveObservations = (double) numObservations;
-      }
-      else _M_.average = ext_mt_computeWeightedMean(fit.threadManager, y, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
-    } else {
-      if (fit.data.weights == NULL) {
-        _M_.average = ext_mt_computeIndexedMean(fit.threadManager, y, observationIndices, numObservations);
-        _M_.numEffectiveObservations = (double) numObservations;
-      }
-      else _M_.average = ext_mt_computeIndexedWeightedMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, &_M_.numEffectiveObservations);
-    } */
+    fit.model.endNodeModel->updateScratchWithValues(fit, *this, r);
   }
   
-  void Node::updateScratchesWithResiduals(const BARTFit& fit, const double* r)
+  void Node::updateBottomNodesWithValues(const BARTFit& fit, const double* r)
   {
     if (isBottom()) {
-      updateScratchWithResiduals(fit, r);
+      updateWithValues(fit, r);
       return;
     }
     
-    leftChild->updateScratchesWithResiduals(fit, r);
-    p.rightChild->updateScratchesWithResiduals(fit, r);
+    leftChild->updateBottomNodesWithValues(fit, r);
+    p.rightChild->updateBottomNodesWithValues(fit, r);
   }
 
-  double Node::computeVariance(const BARTFit& fit, const double* y) const
+  double Node::computeVariance(const BARTFit& fit, const double* y, double average) const
   {
     if (isTop()) {
       if (fit.data.weights == NULL) {
-        return ext_mt_computeVarianceForKnownMean(fit.threadManager, y, numObservations, getAverage());
+        return ext_mt_computeVarianceForKnownMean(fit.threadManager, y, numObservations, average);
       } else {
-        return ext_mt_computeWeightedVarianceForKnownMean(fit.threadManager, y, numObservations, fit.data.weights, getAverage());
+        return ext_mt_computeWeightedVarianceForKnownMean(fit.threadManager, y, numObservations, fit.data.weights, average);
       }
     } else {
       if (fit.data.weights == NULL) {
-        return ext_mt_computeIndexedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, getAverage());
+        return ext_mt_computeIndexedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, average);
       } else {
-        return ext_mt_computeIndexedWeightedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, getAverage());
+        return ext_mt_computeIndexedWeightedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, average);
       }
     }
   }
   
-  double Node::drawFromPosterior(ext_rng* rng, const EndNode::Model& endNodeModel, double residualVariance) const
-//  double Node::drawFromPosterior(ext_rng* rng, const EndNodePrior& endNodePrior, double residualVariance) const
+  double Node::drawFromPosterior(const BARTFit& fit, double residualVariance) const
   {
     if (getNumObservations() == 0) return 0.0;
     
-    
-    return endNodeModel.drawFromPosterior(endNodeModel, rng, getAverage(), getNumEffectiveObservations(), residualVariance);
+    return fit.model.endNodeModel->drawFromPosterior(*fit.model.endNodeModel, fit, *this, residualVariance);
   }
   
   // these could potentially be multithreaded, but the gains are probably minimal
@@ -779,19 +740,13 @@ namespace dbarts {
     if (exhaustedLeftSplits)     leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
-    addObservationsToChildren(fit, y);
+    addObservationsToChildrenAndUpdateValues(fit, y);
   }
 
-  void Node::orphanChildren() {
-    // do this w/o clobbering children pointers until details are nailed down
-    double numEffectiveObservations = _MX_(*leftChild).numEffectiveObservations + _MX_(*p.rightChild).numEffectiveObservations;
-    
-    double average = _MX_(*leftChild).average * (_MX_(*leftChild).numEffectiveObservations / numEffectiveObservations) +
-                     _MX_(*p.rightChild).average * (_MX_(*p.rightChild).numEffectiveObservations / numEffectiveObservations);
+  void Node::orphanChildren(const BARTFit& fit) {
+    fit.model.endNodeModel->updateScratchFromChildren(*this, *leftChild, *p.rightChild);
     
     leftChild = NULL;
-    _M_.average = average;
-    _M_.numEffectiveObservations = numEffectiveObservations;
   }
   
   void Node::countVariableUses(uint32_t* variableCounts) const

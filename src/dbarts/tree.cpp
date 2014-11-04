@@ -37,12 +37,12 @@ namespace {
 }
 
 namespace dbarts {
-  void Tree::updateBottomNodesWithResiduals(const BARTFit& fit, const double* r) {
+  void Tree::updateBottomNodesWithValues(const BARTFit& fit, const double* r) {
     NodeVector bottomNodes(getBottomVector());
     
     size_t numBottomNodes = bottomNodes.size();
     
-    for (size_t i = 0; i < numBottomNodes; ++i) bottomNodes[i]->updateScratchWithResiduals(fit, r);
+    for (size_t i = 0; i < numBottomNodes; ++i) bottomNodes[i]->updateWithValues(fit, r);
   }
   
   void Tree::sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits)
@@ -57,7 +57,7 @@ namespace dbarts {
     for (size_t i = 0; i < numBottomNodes; ++i) {
       const Node& bottomNode(*bottomNodes[i]);
       
-      double posteriorPrediction = bottomNode.drawFromPosterior(fit.control.rng, *fit.model.endNodeModel, fit.state.sigma * fit.state.sigma);
+      double posteriorPrediction = bottomNode.drawFromPosterior(fit, fit.state.sigma * fit.state.sigma);
       bottomNode.setPredictions(trainingFits, posteriorPrediction);
       
       if (testFits != NULL) nodePosteriorPredictions[i] = posteriorPrediction;

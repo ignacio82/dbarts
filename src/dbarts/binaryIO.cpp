@@ -284,7 +284,7 @@ read_model_cleanup:
 namespace {
   using namespace dbarts;
   
-  int writeNode(const BARTFit& fit, Node& node, ext_binaryIO* bio, const size_t* treeIndices);
+  int writeNode(const BARTFit& fit, const Node& node, ext_binaryIO* bio, const size_t* treeIndices);
   int readNode(const BARTFit& fit, Node& node, ext_binaryIO* bio, const size_t* treeIndices);
 }
 
@@ -352,7 +352,7 @@ read_state_cleanup:
 namespace {
   using namespace dbarts;
   
-  int writeNode(const BARTFit& fit, Node& node, ext_binaryIO* bio, const size_t* treeIndices)
+  int writeNode(const BARTFit& fit, const Node& node, ext_binaryIO* bio, const size_t* treeIndices)
   {
     int errorCode = 0;
     
@@ -388,8 +388,7 @@ namespace {
     } else {
       if ((errorCode = ext_bio_writeChar(bio, (char) nodeFlags)) != 0) goto write_node_cleanup;
       
-      if ((errorCode = ext_bio_writeDouble(bio, ((EndNodeMembers*) &node.p)->average)) != 0) goto write_node_cleanup;
-      if ((errorCode = ext_bio_writeDouble(bio, ((EndNodeMembers*) &node.p)->numEffectiveObservations)) != 0) goto write_node_cleanup;
+      if ((errorCode = fit.model.endNodeModel->writeScratch(node, bio)) != 0) goto write_node_cleanup;
     }
     
 write_node_cleanup:
@@ -438,8 +437,8 @@ write_node_cleanup:
       if ((errorCode = readNode(fit, *rightChild, bio, treeIndices)) != 0) goto read_node_cleanup;
     } else {
       node.leftChild = NULL;
-      if ((errorCode = ext_bio_readDouble(bio, &((EndNodeMembers*) &node.p)->average)) != 0) goto read_node_cleanup;
-      if ((errorCode = ext_bio_readDouble(bio, &((EndNodeMembers*) &node.p)->numEffectiveObservations)) != 0) goto read_node_cleanup;  
+      
+      if ((errorCode = fit.model.endNodeModel->readScratch(node, bio)) != 0) goto read_node_cleanup;
     }
     
 read_node_cleanup:

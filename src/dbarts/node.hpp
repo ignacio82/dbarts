@@ -56,11 +56,6 @@ namespace dbarts {
     Rule rule;
   };
   
-  struct EndNodeMembers {
-    double average;
-    double numEffectiveObservations;
-  };
-  
   typedef std::vector<Node*> NodeVector;
   
   Node* createNode(const BARTFit& fit, size_t* observationIndices, size_t numObservations);
@@ -120,25 +115,20 @@ namespace dbarts {
         
     void print(const BARTFit& fit) const;
     
-    void setAverage(double average);                       // call these only on bottom nodes
-    void updateScratchWithResiduals(const BARTFit& fit, const double* r);
-    void updateScratchesWithResiduals(const BARTFit& fit, const double* r); // call anywhere and it'll recurse
-    void setNumEffectiveObservations(double n);
+    void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
+    void updateBottomNodesWithValues(const BARTFit& fit, const double* y); // call anywhere and it'll recurse
     
-    double getAverage() const;
-    double getNumEffectiveObservations() const;
-    double computeVariance(const BARTFit& fit, const double* y) const;
+    double computeVariance(const BARTFit& fit, const double* y, double average) const;
     
     size_t getNumObservations() const;
     const size_t* getObservationIndices() const;
     
-    void addObservationsToChildren(const BARTFit& fit);
-    void addObservationsToChildren(const BARTFit& fit, const double* y); // computes averages in bottom nodes as it goes
+    void addObservationsToChildrenAndClearScratches(const BARTFit& fit);
+    void addObservationsToChildrenAndUpdateValues(const BARTFit& fit, const double* y);
     void clearObservations(const BARTFit& fit);
     void clear(const BARTFit& fit);
     
-    // double drawFromPosterior(ext_rng* rng, const EndNodePrior& endNodePrior, double residualVariance) const;
-    double drawFromPosterior(ext_rng* rng, const EndNode::Model& endNodeModel, double residualVariance) const;
+    double drawFromPosterior(const BARTFit& fit, double residualVariance) const;
     void setPredictions(double* y_hat, double prediction) const;
         
     size_t getDepth() const;
@@ -148,7 +138,7 @@ namespace dbarts {
     size_t getNumVariablesAvailableForSplit(size_t numVariables) const;
     
     void split(const BARTFit& fit, const Rule& rule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits);
-    void orphanChildren();
+    void orphanChildren(const BARTFit& fit);
     
     void countVariableUses(uint32_t* variableCounts) const;
   };
@@ -183,21 +173,21 @@ namespace dbarts {
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }
 //  inline double Node::getAverage() const { return m.average; }
-  inline double Node::getAverage() const { return ((EndNodeMembers*) &p)->average; }
+//  inline double Node::getAverage() const { return ((EndNodeMembers*) &p)->average; }
 
-#ifdef MATCH_BAYES_TREE
+  //#ifdef MATCH_BAYES_TREE
   // This only means something if weights are supplied, which BayesTree didn't have.
   // It is also only meaningful on non-end nodes when using MATCH_BAYES_TREE.
 //  inline double Node::getNumEffectiveObservations() const { if (leftChild == NULL) return m.numEffectiveObservations; else return leftChild->getNumEffectiveObservations() + p.rightChild->getNumEffectiveObservations(); }
-  inline double Node::getNumEffectiveObservations() const { if (leftChild == NULL) return ((EndNodeMembers*) &p)->numEffectiveObservations; else return leftChild->getNumEffectiveObservations() + p.rightChild->getNumEffectiveObservations(); }
-#else
+//  inline double Node::getNumEffectiveObservations() const { if (leftChild == NULL) return ((EndNodeMembers*) &p)->numEffectiveObservations; else return leftChild->getNumEffectiveObservations() + p.rightChild->getNumEffectiveObservations(); }
+  //#else
 //  inline double Node::getNumEffectiveObservations() const { return m.numEffectiveObservations; }
-  inline double Node::getNumEffectiveObservations() const { return ((EndNodeMembers*) &p)->numEffectiveObservations; }
-#endif
+//  inline double Node::getNumEffectiveObservations() const { return ((EndNodeMembers*) &p)->numEffectiveObservations; }
+  //#endif
   // inline void Node::setAverage(double newAverage) { leftChild = NULL; m.average = newAverage; }
   // inline void Node::setNumEffectiveObservations(double n) { leftChild = NULL; m.numEffectiveObservations = n; }
-  inline void Node::setAverage(double newAverage) { leftChild = NULL; ((EndNodeMembers*) &p)->average = newAverage; }
-  inline void Node::setNumEffectiveObservations(double n) { leftChild = NULL; ((EndNodeMembers*) &p)->numEffectiveObservations = n; }
+//  inline void Node::setAverage(double newAverage) { leftChild = NULL; ((EndNodeMembers*) &p)->average = newAverage; }
+//  inline void Node::setNumEffectiveObservations(double n) { leftChild = NULL; ((EndNodeMembers*) &p)->numEffectiveObservations = n; }
   
   
   inline bool Rule::categoryGoesRight(uint32_t categoryId) const { return ((1u << categoryId) & categoryDirections) != 0; }

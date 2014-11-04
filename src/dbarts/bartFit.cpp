@@ -136,7 +136,7 @@ namespace dbarts {
       // next allocates memory
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.addObservationsToChildren(*this);
+      tree_i.addObservationsToChildrenAndClearScratches(*this);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -207,7 +207,7 @@ namespace dbarts {
       
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.addObservationsToChildren(*this);
+      tree_i.addObservationsToChildrenAndClearScratches(*this);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -224,7 +224,7 @@ namespace dbarts {
         }
       }
       
-      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->addObservationsToChildren(*this);
+      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->addObservationsToChildrenAndClearScratches(*this);
     } else {
       
       // go back across bottoms and set predictions to those mus for obs now in node
@@ -456,7 +456,9 @@ namespace dbarts {
         ext_addVectorsInPlace((const double*) state.totalFits, data.numObservations, -1.0, scratch.treeY);
         ext_addVectorsInPlace((const double*) oldTreeFits, data.numObservations, 1.0, scratch.treeY);
         
-        tree_i.updateBottomNodesWithResiduals(*this, scratch.treeY);
+        // this should cache in the bottom nodes values necessary to a) calculate log likelihood/log integrated
+        // likelihood and b) sample from the posterior of the parameters for the model
+        tree_i.updateBottomNodesWithValues(*this, scratch.treeY);
         
         /* if (k == 1 && i <= 1) {
           ext_printf("**before:\n");

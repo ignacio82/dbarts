@@ -119,7 +119,7 @@ namespace dbarts {
       oldState.store(nodeToChange);
       
       // now figure out how the node could have given birth
-      nodeToChange.orphanChildren();
+      nodeToChange.orphanChildren(fit);
       
       double newLogLikelihood = computeLogLikelihoodForBranch(fit, nodeToChange, y);
       transitionProbabilityOfBirthStep = computeProbabilityOfBirthStep(fit, tree, true);

@@ -37,8 +37,7 @@ namespace {
   struct State {
     Rule rule;
     
-    double* averages;
-    double* numEffectiveObservations;
+    void* scratches;
     
     size_t numNodesInSubtree;
     bool* variablesAvailable;
@@ -130,7 +129,7 @@ namespace dbarts {
         }
         
         // fix data at nodes below nodeToChange given new rule
-        nodeToChange.addObservationsToChildren(fit, y);
+        nodeToChange.addObservationsToChildrenAndUpdateValues(fit, y);
         
         // fix VarAvail
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
@@ -186,7 +185,7 @@ namespace dbarts {
         nodeToChange.p.rule.variableIndex = newVariableIndex;
         nodeToChange.p.rule.splitIndex    = newRuleIndex;
         
-        nodeToChange.addObservationsToChildren(fit, y);
+        nodeToChange.addObservationsToChildrenAndUpdateValues(fit, y);
         
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
         if (newVariableIndex != oldState.rule.variableIndex) updateVariablesAvailable(fit, nodeToChange, oldState.rule.variableIndex);
@@ -389,8 +388,8 @@ namespace {
     ++nodeIndex;
     
     if (node.isBottom()) {
-      state.averages[bottomNodeIndex] = node.getAverage();
-      state.numEffectiveObservations[bottomNodeIndex++] = node.getNumEffectiveObservations();
+      fit.model.endNodeModel->storeScratch(node, (char*) state.scratches + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      ++bottomNodeIndex;
       return;
     }
     
@@ -408,8 +407,8 @@ namespace {
     ++nodeIndex;
     
     if (node.isBottom()) {
-      node.setAverage(state.averages[bottomNodeIndex]);
-      node.setNumEffectiveObservations(state.numEffectiveObservations[bottomNodeIndex++]);
+      fit.model.endNodeModel->restoreScratch(node, (char*) state.scratches + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      ++bottomNodeIndex;
       return;
     }
     
@@ -422,8 +421,7 @@ namespace {
     
     size_t numBottomNodes = node.getNumBottomNodes();
     
-    averages = new double[numBottomNodes];
-    numEffectiveObservations = new double[numBottomNodes];
+    scratches = ::operator new(numBottomNodes * fit.model.endNodeModel->perNodeScratchSize);
     
     numNodesInSubtree = 1 + node.getNumNodesBelow();
     variablesAvailable = new bool[numNodesInSubtree * fit.data.numPredictors];
@@ -437,8 +435,7 @@ namespace {
   }
   
   void ::State::destroy() {
-    delete [] averages;
-    delete [] numEffectiveObservations;
+    ::operator delete(scratches);
     
     delete [] variablesAvailable;
     
@@ -454,8 +451,7 @@ namespace {
     size_t nodeIndex = 0, bottomNodeIndex = 0;
     restoreTree(*this, fit, node, nodeIndex, bottomNodeIndex);
     
-    delete [] averages;
-    delete [] numEffectiveObservations;
+    ::operator delete(scratches);
     
     delete [] variablesAvailable;
     
