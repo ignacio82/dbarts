@@ -121,7 +121,7 @@ namespace dbarts {
         
         parent.p.rule.swapWith(child.p.rule);
         
-        parent.addObservationsToChildrenAndUpdateValues(fit, y);
+        parent.updateMembershipsAndValues(fit, y);
         
         //  fix VarAvail
         parentVariableIndex = parent.p.rule.variableIndex;
@@ -178,7 +178,7 @@ namespace dbarts {
         rightChild.p.rule = leftChild.p.rule;
         // std::memcpy(&parent.rightChild->rule, &parent.leftChild->rule, sizeof(Rule));
         
-        parent.addObservationsToChildrenAndUpdateValues(fit, y);
+        parent.updateMembershipsAndValues(fit, y);
         
         //  fix VarAvail
         childVariableIndex = leftChild.p.rule.variableIndex;

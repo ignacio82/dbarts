@@ -300,7 +300,7 @@ namespace {
   SEXP saveToFile(SEXP fitExpr, SEXP fileName)
   {
     BARTFit* fit = static_cast<BARTFit*>(R_ExternalPtrAddr(fitExpr));
-    if (fit == NULL) error("dbarts_setY called on NULL external pointer.");
+    if (fit == NULL) error("dbarts_saveToFile called on NULL external pointer.");
     
     return ScalarLogical(fit->saveToFile(CHAR(STRING_ELT(fileName, 0))));
   }
@@ -309,15 +309,16 @@ namespace {
   {
     BARTFit* fit = BARTFit::loadFromFile(CHAR(STRING_ELT(fileName, 0)));
     
-    delete [] fit->data.maxNumCuts;
-    delete [] fit->data.variableTypes;
+    if (fit != NULL) {
+      delete [] fit->data.maxNumCuts;
+      delete [] fit->data.variableTypes;
       
-    delete fit->model.sigmaSqPrior;
-//    delete fit->model.muPrior;
-    delete fit->model.endNodeModel;
-    delete fit->model.treePrior;
+      delete fit->model.sigmaSqPrior;
+      delete fit->model.endNodeModel;
+      delete fit->model.treePrior;
     
-    delete fit;
+      delete fit;
+    }
     
     return NULL_USER_OBJECT;
   }

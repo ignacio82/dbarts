@@ -20,13 +20,12 @@ using std::size_t;
 
 namespace {
   using namespace dbarts;
-  struct State {
-    Node node;
-    
-    void store(const Node& other);
-    void destroy();
-    void restore(Node& other) const;
-  };
+  
+  void acceptBirth(const BARTFit& fit, Node& copyOfOriginalNode);
+  void rejectBirth(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode);
+  
+  void acceptDeath(const BARTFit& fit, Node& copyOfOriginalNode);
+  void rejectDeath(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode);
 }
 
 namespace dbarts {
@@ -45,8 +44,12 @@ namespace dbarts {
   {
     double ratio;
     
-    ::State* oldStatePtr = ext_stackAllocate(1, ::State);
-    ::State& oldState(*oldStatePtr);
+#ifdef alloca
+    Node* originalNodePtr = static_cast<Node*>(alloca(fit.scratch.nodeSize));
+#else
+    Node* originalNodePtr = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
+#endif
+    Node& copyOfOriginalNode(*originalNodePtr);
     
     // Rather than flipping a coin to see if birth or death, we have to first check that either is possible.
     // Since that involves pretty much finding a node to give birth, we just do that and then possibly ignore
@@ -67,7 +70,9 @@ namespace dbarts {
       double oldLogLikelihood = computeLogLikelihoodForBranch(fit, nodeToChange, y);
       
       // now perform birth;
-      oldState.store(nodeToChange);
+      // shallow copy
+      std::memcpy(&copyOfOriginalNode, const_cast<Node*>(&nodeToChange), fit.scratch.nodeSize);
+      // copyOfOriginalNode.copyFrom(fit, nodeToChange);
 
       bool exhaustedLeftSplits, exhaustedRightSplits;
       Rule newRule = fit.model.treePrior->drawRuleAndVariable(fit, nodeToChange, &exhaustedLeftSplits, &exhaustedRightSplits);
@@ -93,11 +98,11 @@ namespace dbarts {
       ratio = priorRatio * likelihoodRatio * transitionRatio;
       
       if (ext_rng_simulateContinuousUniform(fit.control.rng) < ratio) {
-        oldState.destroy();
+        acceptBirth(fit, copyOfOriginalNode);
         
         *stepWasTaken = true;
       } else {
-        oldState.restore(nodeToChange);
+        rejectBirth(fit, const_cast<Node&>(copyOfOriginalNode), nodeToChange);
         
         *stepWasTaken = false;
       }
@@ -116,7 +121,8 @@ namespace dbarts {
       double rightPriorGrowthProbability  = fit.model.treePrior->computeGrowthProbability(fit, *nodeToChange.getRightChild());
       double oldLogLikelihood = computeLogLikelihoodForBranch(fit, nodeToChange, y);
       
-      oldState.store(nodeToChange);
+      std::memcpy(&copyOfOriginalNode, const_cast<Node*>(&nodeToChange), fit.scratch.nodeSize);
+      //copyOfOriginalNode.copyFrom(nodeToChange);
       
       // now figure out how the node could have given birth
       nodeToChange.orphanChildren(fit);
@@ -140,17 +146,19 @@ namespace dbarts {
       ratio = priorRatio * likelihoodRatio * transitionRatio;
       
       if (ext_rng_simulateContinuousUniform(fit.control.rng) < ratio) {
-        oldState.destroy();
+        acceptDeath(fit, copyOfOriginalNode);
         
         *stepWasTaken = true;
       } else {
-        oldState.restore(nodeToChange);
+        rejectDeath(fit, const_cast<Node&>(copyOfOriginalNode), nodeToChange);
         
         *stepWasTaken = false;
       }
     }
     
-    ext_stackFree(oldStatePtr);
+#ifndef alloca
+    ::operator delete(originalNodePtr);
+#endif
     
     return ratio < 1.0 ? ratio : 1.0;
   }
@@ -276,27 +284,31 @@ namespace dbarts {
 namespace {
   using namespace dbarts;
   
-  void ::State::store(const Node& other) {
-    std::memcpy(&node, &other, sizeof(Node));
+  void acceptBirth(const BARTFit& fit, Node& copyOfOriginalNode)
+  {
+    // no longer an end-node
+    fit.model.endNodeModel->deleteScratch(copyOfOriginalNode);
   }
   
-  void ::State::destroy() {
-    if (node.getLeftChild() != NULL) {
-      // successful death step
-      delete node.getLeftChild();
-      delete node.getRightChild();
-    }
+  void rejectBirth(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
+  {
+    Node::destroy(fit, modifiedNode.getLeftChild());
+    Node::destroy(fit, modifiedNode.getRightChild());
+    std::memcpy(&modifiedNode, &copyOfOriginalNode, fit.scratch.nodeSize);
+    // modifiedNode.copyFrom(fit, copyOfOriginalNode);
   }
   
-  void ::State::restore(Node& other) const {
-    if (node.getLeftChild() == NULL) {
-      // failed birth step
-      if (other.getLeftChild() != NULL) {
-        // TODO: clean this up
-        delete other.leftChild; other.leftChild = NULL;
-        delete other.p.rightChild; other.p.rightChild = NULL;
-      }
-    }
-    std::memcpy(&other, &node, sizeof(Node));
+  void acceptDeath(const BARTFit& fit, Node& copyOfOriginalNode)
+  {
+    Node::destroy(fit, copyOfOriginalNode.getLeftChild());
+    Node::destroy(fit, copyOfOriginalNode.getRightChild());
+  }
+  
+  void rejectDeath(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
+  {
+    // no longer an end-node
+    fit.model.endNodeModel->deleteScratch(modifiedNode);
+    std::memcpy(&modifiedNode, &copyOfOriginalNode, fit.scratch.nodeSize);
+    // modifiedNode.copyFrom(fit, copyOfOriginalNode);
   }
 }

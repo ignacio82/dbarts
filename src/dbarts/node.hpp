@@ -7,17 +7,13 @@
 
 #include <dbarts/types.hpp>
 
-struct ext_rng;
-
 #define NODE_AT(_V_, _I_, _S_) ((Node*) ((char*) (_V_) + (_I_) * _S_))
-
 
 namespace dbarts {
   using std::size_t;
   using std::uint32_t;
   
   struct BARTFit;
-//  struct EndNodePrior;
   
   namespace EndNode { struct Model; }
   
@@ -57,23 +53,10 @@ namespace dbarts {
   };
   
   typedef std::vector<Node*> NodeVector;
-  
-  Node* createNode(const BARTFit& fit, size_t* observationIndices, size_t numObservations);
-  Node* createNode(const BARTFit& fit, const Node& parent);
-  void initializeNode(Node& node, const BARTFit& fit, size_t* observationIndices, size_t numObservations);
-  
-  void deleteNode(Node* node);
-  void invalidateNode(Node& node);
-  
-  
+
   struct Node {
     Node* parent;
     Node* leftChild;
-    
-//    union {
-      ParentMembers p;
-//      EndNodeMembers m;
-//    };
     
 #define BART_INVALID_NODE_ENUM ((size_t) -1)
     size_t enumerationIndex;
@@ -82,10 +65,25 @@ namespace dbarts {
     size_t* observationIndices;
     size_t numObservations;
     
-//    Node(size_t* observationIndices, size_t numObservations, size_t numPredictors); // node is assumed at top
-//    Node(const Node& parent, size_t numPredictors); // node attaches to parent; parent should add observations
-//    ~Node();
+    ParentMembers p; // has to be last member; is actually a union
     
+    // these are static because the size is actually determined by fit, and thus calling a constructor
+    // won't allocate the correct amount
+    // static Node* create(const BARTFit& fit, size_t* observationIndices, size_t numObservations);
+    static Node* create(const BARTFit& fit, const Node& parent);
+    
+    static void initialize(const BARTFit& fit, Node& node, size_t* observationIndices, size_t numObservations);
+    static void destroy(const BARTFit& fit, Node* node); // 'delete' reserved
+    static void invalidate(const BARTFit& fit, Node& node);
+    
+    
+    void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
+    void updateBottomNodesWithValues(const BARTFit& fit, const double* y); // call anywhere and it'll recurse
+    
+    void updateMemberships(const BARTFit& fit);
+    void updateMembershipsAndValues(const BARTFit& fit, const double* y);
+    
+    // deep copies
     void copyFrom(const BARTFit& fit, const Node& other);
     
     
@@ -114,18 +112,16 @@ namespace dbarts {
     Node* findBottomNode(const BARTFit& fit, const double* x) const;
         
     void print(const BARTFit& fit) const;
-    
-    void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
-    void updateBottomNodesWithValues(const BARTFit& fit, const double* y); // call anywhere and it'll recurse
-    
-    double computeVariance(const BARTFit& fit, const double* y, double average) const;
+        
+//    double computeVariance(const BARTFit& fit, const double* y, double average) const;
     
     size_t getNumObservations() const;
     const size_t* getObservationIndices() const;
+#ifdef MATCH_BAYES_TREE
+    double getNumEffectiveObservations(const BARTFit& fit) const;
+#endif
     
-    void addObservationsToChildrenAndClearScratches(const BARTFit& fit);
-    void addObservationsToChildrenAndUpdateValues(const BARTFit& fit, const double* y);
-    void clearObservations(const BARTFit& fit);
+    
     void clear(const BARTFit& fit);
     
     double drawFromPosterior(const BARTFit& fit, double residualVariance) const;
@@ -137,6 +133,7 @@ namespace dbarts {
     size_t getNumNodesBelow() const;
     size_t getNumVariablesAvailableForSplit(size_t numVariables) const;
     
+    // split and orphanChildren *DO NOT* handle node scratch, so that they are more readily reversable
     void split(const BARTFit& fit, const Rule& rule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits);
     void orphanChildren(const BARTFit& fit);
     
@@ -172,24 +169,7 @@ namespace dbarts {
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }
-//  inline double Node::getAverage() const { return m.average; }
-//  inline double Node::getAverage() const { return ((EndNodeMembers*) &p)->average; }
 
-  //#ifdef MATCH_BAYES_TREE
-  // This only means something if weights are supplied, which BayesTree didn't have.
-  // It is also only meaningful on non-end nodes when using MATCH_BAYES_TREE.
-//  inline double Node::getNumEffectiveObservations() const { if (leftChild == NULL) return m.numEffectiveObservations; else return leftChild->getNumEffectiveObservations() + p.rightChild->getNumEffectiveObservations(); }
-//  inline double Node::getNumEffectiveObservations() const { if (leftChild == NULL) return ((EndNodeMembers*) &p)->numEffectiveObservations; else return leftChild->getNumEffectiveObservations() + p.rightChild->getNumEffectiveObservations(); }
-  //#else
-//  inline double Node::getNumEffectiveObservations() const { return m.numEffectiveObservations; }
-//  inline double Node::getNumEffectiveObservations() const { return ((EndNodeMembers*) &p)->numEffectiveObservations; }
-  //#endif
-  // inline void Node::setAverage(double newAverage) { leftChild = NULL; m.average = newAverage; }
-  // inline void Node::setNumEffectiveObservations(double n) { leftChild = NULL; m.numEffectiveObservations = n; }
-//  inline void Node::setAverage(double newAverage) { leftChild = NULL; ((EndNodeMembers*) &p)->average = newAverage; }
-//  inline void Node::setNumEffectiveObservations(double n) { leftChild = NULL; ((EndNodeMembers*) &p)->numEffectiveObservations = n; }
-  
-  
   inline bool Rule::categoryGoesRight(uint32_t categoryId) const { return ((1u << categoryId) & categoryDirections) != 0; }
   inline void Rule::setCategoryGoesRight(uint32_t categoryId) { categoryDirections |= (1u << categoryId); }
   inline void Rule::setCategoryGoesLeft(uint32_t categoryId) { categoryDirections &= ~(1u << categoryId); }

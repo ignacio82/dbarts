@@ -255,7 +255,7 @@ write_model_cleanup:
     if ((errorCode = ext_bio_readNChars(bio, priorName, 4)) != 0) goto read_model_cleanup;
     if (strncmp(priorName, "nrml", 4) != 0) { errorCode = EILSEQ; goto read_model_cleanup; }
     
-    model.endNodeModel = new EndNode::MeanNormalModel;
+    model.endNodeModel = EndNode::createMeanNormalModel();
     if ((errorCode = ext_bio_readDouble(bio, &((EndNode::MeanNormalModel*) model.endNodeModel)->precision)) != 0) goto read_model_cleanup;
     
     
@@ -281,12 +281,12 @@ read_model_cleanup:
   }
 }
 
-namespace {
+/* namespace {
   using namespace dbarts;
   
   int writeNode(const BARTFit& fit, const Node& node, ext_binaryIO* bio, const size_t* treeIndices);
   int readNode(const BARTFit& fit, Node& node, ext_binaryIO* bio, const size_t* treeIndices);
-}
+} */
 
 namespace dbarts {
   bool writeState(const BARTFit& fit, ext_binaryIO* bio)
@@ -300,7 +300,8 @@ namespace dbarts {
     if ((errorCode = ext_bio_writeNSizeTypes(bio, state.treeIndices, data.numObservations * control.numTrees)) != 0) goto write_state_cleanup;
         
     for (size_t i = 0; i < control.numTrees; ++i) {
-      if ((errorCode = writeNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto write_state_cleanup;
+      if ((errorCode = TREE_AT(state.trees, i, fit.scratch.nodeSize)->write(fit, bio)) != 0) goto write_state_cleanup;
+      // if ((errorCode = writeNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto write_state_cleanup;
     }
     
     if ((errorCode = ext_bio_writeNDoubles(bio, state.treeFits, data.numObservations * control.numTrees)) != 0) goto write_state_cleanup;
@@ -328,7 +329,10 @@ write_state_cleanup:
     if ((errorCode = ext_bio_readNSizeTypes(bio, state.treeIndices, data.numObservations * control.numTrees)) != 0) goto read_state_cleanup;
     
     for (size_t i = 0; i < control.numTrees; ++i) {
-      if ((errorCode = readNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto read_state_cleanup;
+      
+      // NODE_AT(state.trees, i, fit.scratch.nodeSize)->observationIndices = state.treeIndices + i * data.numObservations;
+      if ((errorCode = TREE_AT(state.trees, i, fit.scratch.nodeSize)->read(fit, bio)) != 0) goto read_state_cleanup;
+      // if ((errorCode = readNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto read_state_cleanup;
     }
     
     if ((errorCode = ext_bio_readNDoubles(bio, state.treeFits, data.numObservations * control.numTrees)) != 0) goto read_state_cleanup;
@@ -348,6 +352,7 @@ read_state_cleanup:
   }
 }
 
+/*
 #define NODE_HAS_CHILDREN 1
 namespace {
   using namespace dbarts;
@@ -428,11 +433,11 @@ write_node_cleanup:
       if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, (uint32_t*) &node.p.rule.variableIndex)) != 0) goto read_node_cleanup;
       if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.p.rule.categoryDirections)) != 0) goto read_node_cleanup;
       
-      leftChild = dbarts::createNode(fit, node);
+      leftChild = dbarts::Node::create(fit, node);
       node.leftChild = leftChild;
       if ((errorCode = readNode(fit, *leftChild, bio, treeIndices)) != 0) goto read_node_cleanup;
       
-      rightChild = dbarts::createNode(fit, node);
+      rightChild = dbarts::Node::create(fit, node);
       node.p.rightChild = rightChild;
       if ((errorCode = readNode(fit, *rightChild, bio, treeIndices)) != 0) goto read_node_cleanup;
     } else {
@@ -453,3 +458,4 @@ read_node_cleanup:
     return errorCode;
   }
 }
+*/

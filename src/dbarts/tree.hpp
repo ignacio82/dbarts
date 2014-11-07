@@ -8,17 +8,17 @@
 
 #define TREE_AT(_V_, _I_, _S_) ((Tree*) ((char*) (_V_) + (_I_) * (_S_)))
 
+struct ext_binaryIO;
+struct ext_stringWriter;
+
 namespace dbarts {
   using std::size_t;
   using std::uint32_t;
   
   struct BARTFit;
+  struct TreeContentBackup;
   
   struct Tree : Node {
-//    Node top;
-    
-//    Tree(size_t* indices, size_t numObservations, size_t numPredictors) : top(indices, numObservations, numPredictors) { }
-    
     void sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits);
     double* recoverAveragesFromFits(const BARTFit& fit, const double* treeFits); // allocates response; are ordered as bottom nodes are
     void setCurrentFitsFromAverages(const BARTFit& fit, const double* posteriorPredictions, double* trainingFits, double* testFits);
@@ -26,21 +26,16 @@ namespace dbarts {
     Node* getTop() const;
     bool hasSingleNode() const;
     
-    /* size_t getNumBottomNodes() const;
-    size_t getNumNotBottomNodes() const;
-    size_t getNumNodesWhoseChildrenAreBottom() const;
-    size_t getNumSwappableNodes() const;
-    
-    NodeVector getBottomNodes() const;
-    NodeVector getNotBottomNodes() const;
-    NodeVector getNodesWhoseChildrenAreAtBottom() const;
-    NodeVector getSwappableNodes() const; */
     
     void updateBottomNodesWithValues(const BARTFit& fit, const double* y);
     
-    // void countVariableUses(uint32_t* variableCounts);
-    
     const char* createString() const;
+    
+    int read(const BARTFit& fit, const char* string);
+    int read(const BARTFit& fit, ext_binaryIO* bio);
+    
+    int write(const BARTFit& fit, ext_binaryIO* bio) const;
+    int write(ext_stringWriter* writer) const;
     
     bool isValid() const;
   };
@@ -61,18 +56,8 @@ namespace dbarts {
   
   
   
-  inline Node* Tree::getTop() const { return (Node*) this; }
+  inline Node* Tree::getTop() const { return const_cast<Node*>(static_cast<const Node*>(this)); }
   inline bool Tree::hasSingleNode() const { return isBottom(); }
-  
-/*   inline size_t Tree::getNumBottomNodes() const { return top.getNumBottomNodes(); }
-  inline size_t Tree::getNumNotBottomNodes() const { return top.getNumNotBottomNodes(); }
-  inline size_t Tree::getNumNodesWhoseChildrenAreBottom() const { return top.getNumNoGrandNodes(); }
-  inline size_t Tree::getNumSwappableNodes() const { return top.getNumSwappableNodes(); }
-  
-  inline NodeVector Tree::getBottomNodes() const { return top.getBottomVector(); }
-  inline NodeVector Tree::getNotBottomNodes() const { return top.getNotBottomVector(); }
-  inline NodeVector Tree::getNodesWhoseChildrenAreAtBottom() const { return top.getNoGrandVector(); }
-  inline NodeVector Tree::getSwappableNodes() const { return top.getSwappableVector(); } */
 }
 
 #endif

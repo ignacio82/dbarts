@@ -44,6 +44,14 @@ void ext_addVectors(const double* restrict x, size_t length, double alpha, const
   }
 }
 
+double ext_dotProduct(const double* x, size_t u_length, const double* y)
+{
+  int length = (int) u_length;
+  
+  return F77_NAME(ddot)(&length, x, &increment, y, &increment);
+}
+
+
 void ext_setVectorToConstant(double* x, size_t length, double alpha)
 {
   if (length == 0) return;

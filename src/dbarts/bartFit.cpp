@@ -136,7 +136,7 @@ namespace dbarts {
       // next allocates memory
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.addObservationsToChildrenAndClearScratches(*this);
+      tree_i.updateMemberships(*this);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -207,7 +207,7 @@ namespace dbarts {
       
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.addObservationsToChildrenAndClearScratches(*this);
+      tree_i.updateMemberships(*this);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -224,7 +224,7 @@ namespace dbarts {
         }
       }
       
-      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->addObservationsToChildrenAndClearScratches(*this);
+      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateMemberships(*this);
     } else {
       
       // go back across bottoms and set predictions to those mus for obs now in node
@@ -382,8 +382,7 @@ namespace dbarts {
     }
     delete [] scratch.cutPoints; scratch.cutPoints = NULL;
     
-    // if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; ) state.trees[--i].~Tree();
-    if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; --i) invalidateNode(*NODE_AT(state.trees, i - 1, scratch.nodeSize));
+    if (state.trees != NULL) for (size_t i = control.numTrees; i > 0; --i) Node::invalidate(*this, *NODE_AT(state.trees, i - 1, scratch.nodeSize));
     ::operator delete (state.trees); state.trees = NULL;
     delete [] state.treeIndices; state.treeIndices = NULL;
     
@@ -694,8 +693,7 @@ namespace {
     state.treeIndices = new size_t[data.numObservations * control.numTrees];
     
     for (size_t i = 0; i < control.numTrees; ++i) {
-      // new (state.trees + i) Tree(state.treeIndices + i * data.numObservations, data.numObservations, data.numPredictors);
-      initializeNode(*NODE_AT(state.trees, i, fit.scratch.nodeSize), fit, state.treeIndices + i * data.numObservations, data.numObservations);
+      Node::initialize(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), state.treeIndices + i * data.numObservations, data.numObservations);
     }
     
     if (control.numThreads > 1 && ext_mt_create(&fit.threadManager, control.numThreads) != 0) {

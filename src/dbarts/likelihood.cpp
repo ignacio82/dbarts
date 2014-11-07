@@ -23,7 +23,7 @@ namespace dbarts {
       
       if (bottomNode.getNumObservations() == 0) return -10000000.0;
       
-      logProbability += fit.model.endNodeModel->computeLogIntegratedLikelihood(*fit.model.endNodeModel, fit, bottomNode, y, fit.state.sigma * fit.state.sigma);
+      logProbability += fit.model.endNodeModel->computeLogIntegratedLikelihood(fit, bottomNode, y, fit.state.sigma * fit.state.sigma);
     }
     
     return logProbability;

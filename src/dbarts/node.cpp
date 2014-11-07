@@ -73,69 +73,47 @@ namespace dbarts {
     // since is a union of variables of the same width, bit-wise equality is sufficient
     return splitIndex == other.splitIndex;
   }
+}
+namespace {
+  using namespace dbarts;
   
-  
-  void Node::clearObservations(const BARTFit& fit)
-  {
-    if (!isTop()) {
-      observationIndices = NULL;
-      numObservations = 0;
+  void clearObservationsInNode(const BARTFit& fit, Node& node) {
+    if (!node.isTop()) {
+      node.observationIndices = NULL;
+      node.numObservations = 0;
     }
-    if (!isBottom()) {
-      leftChild->clearObservations(fit);
-      p.rightChild->clearObservations(fit);
-    } else {
-      fit.model.endNodeModel->clearScratch(*this);
+    if (!node.isBottom()) {
+      clearObservationsInNode(fit, *node.leftChild);
+      clearObservationsInNode(fit, *node.p.rightChild);
     }
   }
-  
+}
+
+namespace dbarts {
   void Node::clear(const BARTFit& fit)
   {
     if (!isBottom()) {
-      delete leftChild;
-      delete p.rightChild;
+      Node::destroy(fit, leftChild);
+      Node::destroy(fit, p.rightChild);
       
       leftChild = NULL;
       p.rule.invalidate();
+    } else {
+      fit.model.endNodeModel->deleteScratch(*this);
     }
-    clearObservations(fit);
+    clearObservationsInNode(fit, *this);
   }
   
-/*  Node::Node(size_t* observationIndices, size_t numObservations, size_t numPredictors) :
-    parent(NULL), leftChild(NULL), enumerationIndex(BART_INVALID_NODE_ENUM), variablesAvailableForSplit(NULL),
-    observationIndices(observationIndices), numObservations(numObservations)
-  {
-    variablesAvailableForSplit = new bool[numPredictors];
-    for (size_t i = 0; i < numPredictors; ++i) variablesAvailableForSplit[i] = true;
-  }
-  
-  Node::Node(const Node& parent, size_t numPredictors) :
-    parent(const_cast<Node*>(&parent)), leftChild(NULL), enumerationIndex(BART_INVALID_NODE_ENUM),
-    variablesAvailableForSplit(NULL), observationIndices(NULL), numObservations(0)
-  {
-    variablesAvailableForSplit = new bool[numPredictors];
-    std::memcpy(variablesAvailableForSplit, this->parent->variablesAvailableForSplit, sizeof(bool) * numPredictors);
-  }
-  
-  Node::~Node()
-  {
-    if (leftChild != NULL) {
-      delete leftChild; leftChild = NULL;
-      delete p.rightChild; p.rightChild = NULL;
-    }
-    delete [] variablesAvailableForSplit; variablesAvailableForSplit = NULL;
-  } */
-  
-  Node* createNode(const BARTFit& fit, size_t* observationIndices, size_t numObservations)
+  /* Node* Node::create(const BARTFit& fit, size_t* observationIndices, size_t numObservations)
   {
     Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
 
-    initializeNode(*result, fit, observationIndices, numObservations);
+    Node::initialize(fit, *result, observationIndices, numObservations);
 
     return result;
-  }
+  } */
 
-  Node* createNode(const BARTFit& fit, const Node& parent)
+  Node* Node::create(const BARTFit& fit, const Node& parent)
   {
     Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
     result->parent = const_cast<Node*>(&parent);
@@ -148,10 +126,12 @@ namespace dbarts {
     result->variablesAvailableForSplit = new bool[fit.data.numPredictors];
     std::memcpy(result->variablesAvailableForSplit, parent.variablesAvailableForSplit, sizeof(bool) * fit.data.numPredictors);
     
+    fit.model.endNodeModel->createScratch(fit, *result);
+    
     return result;
   }
 
-  void initializeNode(Node& node, const BARTFit& fit, size_t* observationIndices, size_t numObservations)
+  void Node::initialize(const BARTFit& fit, Node& node, size_t* observationIndices, size_t numObservations)
   {
     node.parent = NULL;
     node.leftChild = NULL;
@@ -162,22 +142,24 @@ namespace dbarts {
 
     node.variablesAvailableForSplit = new bool[fit.data.numPredictors];
     for (size_t i = 0; i < fit.data.numPredictors; ++i) node.variablesAvailableForSplit[i] = true;
+    
+    fit.model.endNodeModel->createScratch(fit, node);
   }
 
-  void deleteNode(Node* node)
+  void Node::destroy(const BARTFit& fit, Node* node)
   {
-    invalidateNode(*node);
+    Node::invalidate(fit, *node);
 
     ::operator delete (node);
   }
   
-  void invalidateNode(Node& node)
+  void Node::invalidate(const BARTFit& fit, Node& node)
   {
-    if (node.leftChild != NULL) {
-      deleteNode(node.leftChild);
-      deleteNode(node.p.rightChild);
+    if (!node.isBottom()) {
+      Node::destroy(fit, node.leftChild);
+      Node::destroy(fit, node.p.rightChild);
     } else {
-      // model related cleaning, maybe
+      fit.model.endNodeModel->deleteScratch(node);
     }
     delete [] node.variablesAvailableForSplit; node.variablesAvailableForSplit = NULL;
   }
@@ -186,18 +168,19 @@ namespace dbarts {
   {
     parent = other.parent;
     leftChild = other.leftChild;
-    if (leftChild != NULL) {
-      p.rightChild = other.p.rightChild;
-      p.rule.copyFrom(other.p.rule);
-    } else {
-      fit.model.endNodeModel->copyScratch(*this, other);
-    }
     
     enumerationIndex = other.enumerationIndex;
     std::memcpy(variablesAvailableForSplit, other.variablesAvailableForSplit, sizeof(bool) * fit.data.numPredictors);
     
     observationIndices = other.observationIndices;
     numObservations = other.numObservations;
+    
+    if (!isBottom()) {
+      p.rightChild = other.p.rightChild;
+      p.rule.copyFrom(other.p.rule);
+    } else {
+      fit.model.endNodeModel->copyScratch(fit, *this, other);
+    }
   }
   
   void Node::print(const BARTFit& fit) const
@@ -223,7 +206,7 @@ namespace dbarts {
         ext_printf("ORDRule: (%d)=%f", p.rule.splitIndex, p.rule.getSplitValue(fit));
       }
     } else {
-      fit.model.endNodeModel->printScratch(*this);
+      fit.model.endNodeModel->printScratch(fit, *this);
     }
     ext_printf("\n");
     
@@ -552,15 +535,37 @@ namespace {
 // #define MIN_NUM_OBSERVATIONS_IN_NODE_PER_THREAD 5000
 
 namespace dbarts {
-  void Node::addObservationsToChildrenAndUpdateValues(const BARTFit& fit, const double* y) {
+  
+#ifdef MATCH_BAYES_TREE
+  // This only means something if weights are supplied, which BayesTree didn't have.
+  // It is also only meaningful on non-end nodes when using MATCH_BAYES_TREE.
+
+  inline double Node::getNumEffectiveObservations(const BARTFit& fit) const {
+    if (fit.data.weights == NULL) return getNumObservations();
+    
+    if (leftChild == NULL) {
+      double n = 0.0;
+      if (isTop()) {
+        for (size_t i = 0; i < numObservations; ++i) n += fit.data.weights[i];
+      } else {
+        for (size_t i = 0; i < numObservations; ++i) n += fit.data.weights[observationIndices[i]];
+      }
+      return n;
+    } else {
+      return leftChild->getNumEffectiveObservations(fit) + p.rightChild->getNumEffectiveObservations(fit);
+    }
+  }
+#endif
+  
+  void Node::updateMembershipsAndValues(const BARTFit& fit, const double* y) {
 
     if (isBottom()) {
-      fit.model.endNodeModel->updateScratchWithObservationsAndValues(fit, *this, y);
+      fit.model.endNodeModel->updateScratchWithMembershipsAndValues(fit, *this, y);
       return;
     }
     
-    leftChild->clearObservations(fit);
-    p.rightChild->clearObservations(fit);
+    clearObservationsInNode(fit, *leftChild);
+    clearObservationsInNode(fit, *p.rightChild);
     
     /*size_t numThreads, numElementsPerThread;
     ext_mt_getNumThreadsForJob(fit.threadManager, numObservations, MIN_NUM_OBSERVATIONS_IN_NODE_PER_THREAD,
@@ -613,18 +618,18 @@ namespace dbarts {
     p.rightChild->numObservations = numObservations - numOnLeft;
     
     
-    leftChild->addObservationsToChildrenAndUpdateValues(fit, y);
-    p.rightChild->addObservationsToChildrenAndUpdateValues(fit, y);
+    leftChild->updateMembershipsAndValues(fit, y);
+    p.rightChild->updateMembershipsAndValues(fit, y);
   }
   
-  void Node::addObservationsToChildrenAndClearScratches(const BARTFit& fit) {
+  void Node::updateMemberships(const BARTFit& fit) {
     if (isBottom()) {
-      fit.model.endNodeModel->clearScratch(*this);
+      fit.model.endNodeModel->updateScratchWithMemberships(fit, *this);
       return;
     }
     
-    leftChild->clearObservations(fit);
-    p.rightChild->clearObservations(fit);
+    clearObservationsInNode(fit, *leftChild);
+    clearObservationsInNode(fit, *p.rightChild);
     
     size_t numOnLeft = 0;
     if (numObservations > 0) {
@@ -640,8 +645,8 @@ namespace dbarts {
     p.rightChild->observationIndices = observationIndices + numOnLeft;
     p.rightChild->numObservations = numObservations - numOnLeft;
     
-    leftChild->addObservationsToChildrenAndClearScratches(fit);
-    p.rightChild->addObservationsToChildrenAndClearScratches(fit);
+    leftChild->updateMemberships(fit);
+    p.rightChild->updateMemberships(fit);
   }
 	
   void Node::updateWithValues(const BARTFit& fit, const double* r)
@@ -661,29 +666,12 @@ namespace dbarts {
     leftChild->updateBottomNodesWithValues(fit, r);
     p.rightChild->updateBottomNodesWithValues(fit, r);
   }
-
-  double Node::computeVariance(const BARTFit& fit, const double* y, double average) const
-  {
-    if (isTop()) {
-      if (fit.data.weights == NULL) {
-        return ext_mt_computeVarianceForKnownMean(fit.threadManager, y, numObservations, average);
-      } else {
-        return ext_mt_computeWeightedVarianceForKnownMean(fit.threadManager, y, numObservations, fit.data.weights, average);
-      }
-    } else {
-      if (fit.data.weights == NULL) {
-        return ext_mt_computeIndexedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, average);
-      } else {
-        return ext_mt_computeIndexedWeightedVarianceForKnownMean(fit.threadManager, y, observationIndices, numObservations, fit.data.weights, average);
-      }
-    }
-  }
   
   double Node::drawFromPosterior(const BARTFit& fit, double residualVariance) const
   {
     if (getNumObservations() == 0) return 0.0;
     
-    return fit.model.endNodeModel->drawFromPosterior(*fit.model.endNodeModel, fit, *this, residualVariance);
+    return fit.model.endNodeModel->drawFromPosterior(fit, *this, residualVariance);
   }
   
   // these could potentially be multithreaded, but the gains are probably minimal
@@ -732,15 +720,13 @@ namespace dbarts {
     
     p.rule = newRule;
     
-//    leftChild    = new Node(*this, fit.data.numPredictors);
-//    p.rightChild = new Node(*this, fit.data.numPredictors);
-    leftChild    = createNode(fit, *this);
-    p.rightChild = createNode(fit, *this);
+    leftChild    = Node::create(fit, *this);
+    p.rightChild = Node::create(fit, *this);
     
     if (exhaustedLeftSplits)     leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
-    addObservationsToChildrenAndUpdateValues(fit, y);
+    updateMembershipsAndValues(fit, y);
   }
 
   void Node::orphanChildren(const BARTFit& fit) {
