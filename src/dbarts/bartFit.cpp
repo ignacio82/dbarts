@@ -136,7 +136,8 @@ namespace dbarts {
       // next allocates memory
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.updateMemberships(*this);
+      // tree_i.updateMemberships(*this);
+      tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -207,7 +208,8 @@ namespace dbarts {
       
       nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      tree_i.updateMemberships(*this);
+      // tree_i.updateMemberships(*this);
+      tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
       
       treesAreValid &= tree_i.isValid();
     }
@@ -224,7 +226,8 @@ namespace dbarts {
         }
       }
       
-      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateMemberships(*this);
+      // for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateMemberships(*this);
+      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     } else {
       
       // go back across bottoms and set predictions to those mus for obs now in node
@@ -458,7 +461,8 @@ namespace dbarts {
         
         // this should cache in the bottom nodes values necessary to a) calculate log likelihood/log integrated
         // likelihood and b) sample from the posterior of the parameters for the model
-        tree_i.updateBottomNodesWithValues(*this, scratch.treeY);
+        // tree_i.updateBottomNodesWithValues(*this, scratch.treeY);
+        tree_i.updateState(*this, scratch.treeY, BART_NODE_UPDATE_VALUES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED);
         
         /* if (k == 1 && i <= 1) {
           ext_printf("**before:\n");

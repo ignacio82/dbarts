@@ -77,12 +77,17 @@ namespace dbarts {
     static void destroy(const BARTFit& fit, Node* node); // 'delete' reserved
     static void invalidate(const BARTFit& fit, Node& node);
     
+#define BART_NODE_UPDATE_COVARIATES_CHANGED      0x1 // top two do the same thing, i.e. calculate memberships
+#define BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED  0x1
+#define BART_NODE_UPDATE_VALUES_CHANGED          0x2
+#define BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED 0x4
+    void updateState(const BARTFit& fit, const double* y, uint32_t updateType);
     
-    void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
+/*     void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
     void updateBottomNodesWithValues(const BARTFit& fit, const double* y); // call anywhere and it'll recurse
     
     void updateMemberships(const BARTFit& fit);
-    void updateMembershipsAndValues(const BARTFit& fit, const double* y);
+    void updateMembershipsAndValues(const BARTFit& fit, const double* y); */
     
     // deep copies
     void copyFrom(const BARTFit& fit, const Node& other);

@@ -52,13 +52,13 @@ namespace {
 }
 
 namespace dbarts {
-  void Tree::updateBottomNodesWithValues(const BARTFit& fit, const double* r) {
+/*  void Tree::updateBottomNodesWithValues(const BARTFit& fit, const double* r) {
     NodeVector bottomNodes(getBottomVector());
     
     size_t numBottomNodes = bottomNodes.size();
     
     for (size_t i = 0; i < numBottomNodes; ++i) bottomNodes[i]->updateWithValues(fit, r);
-  }
+  }*/
   
   void Tree::sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits)
   {
@@ -325,10 +325,9 @@ namespace dbarts {
     
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, p.rule.variableIndex);
-      updateMemberships(fit);
-    } else {
-      fit.model.endNodeModel->updateScratchWithMemberships(fit, *this);
+      //updateMemberships(fit);
     }
+    updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     
     return 0;
   }
@@ -343,10 +342,8 @@ namespace dbarts {
     
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, p.rule.variableIndex);
-      updateMemberships(fit);
-    } else {
-      fit.model.endNodeModel->updateScratchWithMemberships(fit, *this);
-    }
+    } // updateMemberships(fit);
+    updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     
     return 0;
   }

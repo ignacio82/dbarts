@@ -129,7 +129,8 @@ namespace dbarts {
         }
         
         // fix data at nodes below nodeToChange given new rule
-        nodeToChange.updateMembershipsAndValues(fit, y);
+        // nodeToChange.updateMembershipsAndValues(fit, y);
+        nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         // fix VarAvail
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
@@ -185,7 +186,8 @@ namespace dbarts {
         nodeToChange.p.rule.variableIndex = newVariableIndex;
         nodeToChange.p.rule.splitIndex    = newRuleIndex;
         
-        nodeToChange.updateMembershipsAndValues(fit, y);
+        // nodeToChange.updateMembershipsAndValues(fit, y);
+        nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
         if (newVariableIndex != oldState.rule.variableIndex) updateVariablesAvailable(fit, nodeToChange, oldState.rule.variableIndex);

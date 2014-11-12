@@ -557,7 +557,59 @@ namespace dbarts {
   }
 #endif
   
-  void Node::updateMembershipsAndValues(const BARTFit& fit, const double* y) {
+  void Node::updateState(const BARTFit& fit, const double* y, uint32_t updateType)
+  {
+    if (isBottom()) {
+      switch(updateType) {
+        case BART_NODE_UPDATE_COVARIATES_CHANGED:
+        case BART_NODE_UPDATE_COVARIATES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED:
+        fit.model.endNodeModel->updateScratchWithMemberships(fit, *this);
+        break;
+        
+        case BART_NODE_UPDATE_VALUES_CHANGED:
+        case BART_NODE_UPDATE_VALUES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED:
+        leftChild = NULL;
+        fit.model.endNodeModel->updateScratchWithValues(fit, *this, y);
+        break;
+        
+        case BART_NODE_UPDATE_COVARIATES_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED:
+        case BART_NODE_UPDATE_COVARIATES_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED:
+        fit.model.endNodeModel->updateScratchWithMembershipsAndValues(fit, *this, y);
+        break;
+        
+        default:
+        break;
+      }
+      return;
+    }
+    
+    // update membership
+    if (updateType & BART_NODE_UPDATE_COVARIATES_CHANGED) {
+      clearObservationsInNode(fit, *leftChild);
+      clearObservationsInNode(fit, *p.rightChild);
+  
+      size_t numOnLeft = 0;
+  
+      if (numObservations > 0) {
+        IndexOrdering ordering(fit, p.rule);
+  
+        numOnLeft = (isTop() ?
+                     partitionRange(observationIndices, 0, numObservations, ordering) :
+                     partitionIndices(observationIndices, numObservations, ordering));
+      }
+  
+  
+      leftChild->observationIndices = observationIndices;
+      leftChild->numObservations = numOnLeft;
+      p.rightChild->observationIndices = observationIndices + numOnLeft;
+      p.rightChild->numObservations = numObservations - numOnLeft;
+    }
+    
+    leftChild->updateState(fit, y, updateType);
+    p.rightChild->updateState(fit, y, updateType);
+  }
+  
+/*  void Node::updateMembershipsAndValues(const BARTFit& fit, const double* y) {
 
     if (isBottom()) {
       fit.model.endNodeModel->updateScratchWithMembershipsAndValues(fit, *this, y);
@@ -567,48 +619,14 @@ namespace dbarts {
     clearObservationsInNode(fit, *leftChild);
     clearObservationsInNode(fit, *p.rightChild);
     
-    /*size_t numThreads, numElementsPerThread;
-    ext_mt_getNumThreadsForJob(fit.threadManager, numObservations, MIN_NUM_OBSERVATIONS_IN_NODE_PER_THREAD,
-                               &numThreads, &numElementsPerThread); */
-    
     size_t numOnLeft = 0;
     
     if (numObservations > 0) {
       IndexOrdering ordering(fit, p.rule);
     
-      //if (numThreads <= 1) {
-        numOnLeft = (isTop() ?
-                     partitionRange(observationIndices, 0, numObservations, ordering) :
-                     partitionIndices(observationIndices, numObservations, ordering));
-      /*} else {
-        PartitionThreadData* threadData = ext_stackAllocate(numThreads, PartitionThreadData);
-        void** threadDataPtrs = ext_stackAllocate(numThreads, void*);
-      
-        size_t i;
-        for (i = 0; i < numThreads - 1; ++i) {
-          threadData[i].indices = observationIndices + i * numElementsPerThread;
-          threadData[i].startIndex = isTop() ? i * numElementsPerThread : ((size_t) -1);
-          threadData[i].length = numElementsPerThread;
-          threadData[i].ordering = &ordering;
-          threadDataPtrs[i] = &threadData[i];
-        }
-        threadData[i].indices = observationIndices + i * numElementsPerThread;
-        threadData[i].startIndex = isTop() ? i * numElementsPerThread : ((size_t) -1);
-        threadData[i].length = numObservations - i * numElementsPerThread;
-        threadData[i].ordering = &ordering;
-        threadDataPtrs[i] = &threadData[i];
-     
-      
-      
-        ext_mt_runTasks(fit.threadManager, &partitionTask, threadDataPtrs, numThreads);
-      
-      
-      
-        numOnLeft = mergePartitions(threadData, numThreads);
-      
-        ext_stackFree(threadDataPtrs);
-        ext_stackFree(threadData);
-      } */
+      numOnLeft = (isTop() ?
+                   partitionRange(observationIndices, 0, numObservations, ordering) :
+                   partitionIndices(observationIndices, numObservations, ordering));
     }
     
     
@@ -665,7 +683,7 @@ namespace dbarts {
     
     leftChild->updateBottomNodesWithValues(fit, r);
     p.rightChild->updateBottomNodesWithValues(fit, r);
-  }
+  } */
   
   double Node::drawFromPosterior(const BARTFit& fit, double residualVariance) const
   {
@@ -726,7 +744,8 @@ namespace dbarts {
     if (exhaustedLeftSplits)     leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
-    updateMembershipsAndValues(fit, y);
+    updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+    // updateMembershipsAndValues(fit, y);
   }
 
   void Node::orphanChildren(const BARTFit& fit) {
