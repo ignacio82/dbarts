@@ -318,6 +318,7 @@ static void validateSeed(ext_rng* generator, bool isFirstRun)
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
+#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
 // guarantees results in (0, 1)
 inline static double truncateToUnitInterval(double x) {
   if (x <= 0.0) return 0.5 * THIRTY_TWO_BIT_INVERSE;
