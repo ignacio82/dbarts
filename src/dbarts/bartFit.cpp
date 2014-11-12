@@ -250,14 +250,14 @@ namespace dbarts {
     return treesAreValid;
   }
   
+#define INVALID_ADDRESS reinterpret_cast<const double*>(this)
   void BARTFit::setTestPredictor(const double* newTestPredictor, size_t numTestObservations) {
-    setTestPredictorAndOffset(newTestPredictor, (const double*) this, numTestObservations);
+    setTestPredictorAndOffset(newTestPredictor, INVALID_ADDRESS, numTestObservations);
   }
   
   void BARTFit::setTestOffset(const double* newTestOffset) {
      data.testOffset = newTestOffset;
   }
-  
   // setting testOffset to NULL is valid
   // an invalid pointer address for testOffset is the object itself; when invalid, it is not updated
   void BARTFit::setTestPredictorAndOffset(const double* X_test, const double* testOffset, size_t numTestObservations) {
@@ -287,7 +287,7 @@ namespace dbarts {
         }
       }
       
-      if (testOffset != (const double*) this) data.testOffset = testOffset;
+      if (testOffset != INVALID_ADDRESS) data.testOffset = testOffset;
       
       double* currTestFits = new double[data.numTestObservations];
     
@@ -309,6 +309,7 @@ namespace dbarts {
       delete [] currTestFits;
     }
   }
+#undef INVALID_ADDRESS
   
   void BARTFit::updateTestPredictor(const double* newTestPredictor, size_t column) {
     updateTestPredictors(newTestPredictor, &column, 1);
@@ -354,8 +355,8 @@ namespace dbarts {
       scratch.nodeSize = sizeof(Node);
     } else {
       // however many chars the parent members are in from the root is the base
-      ptrdiff_t signedNodeSize = ((char*) &((Node*) NULL)->p - (char*) NULL);
-      scratch.nodeSize = (size_t) (signedNodeSize >= 0 ? signedNodeSize : -signedNodeSize) + model.endNodeModel->perNodeScratchSize;
+      ptrdiff_t signedNodeSize = reinterpret_cast<char*>(&reinterpret_cast<Node*>(NULL)->p) - reinterpret_cast<char*>(NULL);
+      scratch.nodeSize = static_cast<size_t>(signedNodeSize >= 0 ? signedNodeSize : -signedNodeSize) + model.endNodeModel->perNodeScratchSize;
     }
     
     allocateMemory(*this);
@@ -405,11 +406,11 @@ namespace dbarts {
     StepType ignored;
     
     Results* resultsPointer = new Results(data.numObservations, data.numPredictors,
-                                          data.numTestObservations, numSamples);
+                                          data.numTestObservations, numSamples == 0 ? 1 : numSamples); // ensure at least one sample for state's sake
     Results& results(*resultsPointer);
     
     double numEffectiveObservations = 
-      data.weights == NULL ? (double) data.numObservations : ext_sumVectorElements(data.weights, data.numObservations);
+      data.weights == NULL ? static_cast<double>(data.numObservations) : ext_sumVectorElements(data.weights, data.numObservations);
     
     
     double* currFits = new double[data.numObservations];
@@ -452,8 +453,8 @@ namespace dbarts {
         // treeY = y - (totalFits - oldTreeFits)
         // is residual from every *other* tree, so what is left for this tree to do
         std::memcpy(scratch.treeY, scratch.yRescaled, data.numObservations * sizeof(double));
-        ext_addVectorsInPlace((const double*) state.totalFits, data.numObservations, -1.0, scratch.treeY);
-        ext_addVectorsInPlace((const double*) oldTreeFits, data.numObservations, 1.0, scratch.treeY);
+        ext_addVectorsInPlace(const_cast<const double*>(state.totalFits), data.numObservations, -1.0, scratch.treeY);
+        ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), data.numObservations, 1.0, scratch.treeY);
         
         // this should cache in the bottom nodes values necessary to a) calculate log likelihood/log integrated
         // likelihood and b) sample from the posterior of the parameters for the model
@@ -488,14 +489,14 @@ namespace dbarts {
         tree_i.sampleAveragesAndSetFits(*this, currFits, isThinningIteration ? NULL : currTestFits);
         
         // totalFits += currFits - oldTreeFits
-        ext_addVectorsInPlace((const double*) oldTreeFits, data.numObservations, -1.0, state.totalFits);
-        ext_addVectorsInPlace((const double*) currFits, data.numObservations, 1.0, state.totalFits);
+        ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), data.numObservations, -1.0, state.totalFits);
+        ext_addVectorsInPlace(const_cast<const double*>(currFits), data.numObservations, 1.0, state.totalFits);
         
         if (!isThinningIteration && data.numTestObservations > 0) {
-          ext_addVectorsInPlace((const double*) currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
+          ext_addVectorsInPlace(const_cast<const double*>(currTestFits), data.numTestObservations, 1.0, state.totalTestFits);
         }
         
-        std::memcpy(oldTreeFits, (const double*) currFits, data.numObservations * sizeof(double));
+        std::memcpy(oldTreeFits, const_cast<const double*>(currFits), data.numObservations * sizeof(double));
       }
       
       if (control.responseIsBinary) {
@@ -507,7 +508,6 @@ namespace dbarts {
         } else {
           sumOfSquaredResiduals = ext_mt_computeSumOfSquaredResiduals(threadManager, scratch.yRescaled, data.numObservations, state.totalFits);
         }
-        // double sumOfSquaredResiduals = ext_computeAndSumSquaresOfResidualsForVector(scratch.yRescaled, data.numObservations, state.totalFits);
         state.sigma = std::sqrt(model.sigmaSqPrior->drawFromPosterior(control.rng, numEffectiveObservations, sumOfSquaredResiduals));
       }
       
@@ -518,6 +518,7 @@ namespace dbarts {
         size_t simNum = (!isBurningIn ? majorIterationNum - numBurnIn : 0);
         
         countVariableUses(*this, variableCounts);
+        
         storeSamples(*this, results, state.totalFits, state.totalTestFits, state.sigma, variableCounts, simNum);
         
         if (control.callback != NULL) {
@@ -543,6 +544,10 @@ namespace dbarts {
     if (data.numTestObservations > 0) delete [] currTestFits;
     ext_stackFree(variableCounts);
     
+    if (numSamples == 0) {
+      delete resultsPointer;
+      return NULL;
+    }
     
     return resultsPointer;
   }
@@ -568,7 +573,7 @@ namespace {
     ext_printf("Prior:\n");
     // dirty hack... should have priors print themselves
     double sigma = std::sqrt(1.0 / static_cast<EndNode::MeanNormalModel*>(model.endNodeModel)->precision);
-    double k = (control.responseIsBinary ? 3.0 : 0.5) /  (sigma * std::sqrt((double) control.numTrees));
+    double k = (control.responseIsBinary ? 3.0 : 0.5) /  (sigma * std::sqrt(static_cast<double>(control.numTrees)));
     ext_printf("\tk: %f\n", k);
     if (!control.responseIsBinary) {
       ChiSquaredPrior* residPrior = static_cast<ChiSquaredPrior*>(model.sigmaSqPrior);
@@ -641,7 +646,7 @@ namespace {
     ext_printf("Variable Usage, last iteration (var:count):\n");
     countVariableUses(fit, variableCounts);
     for (size_t i = 0; i < fit.data.numPredictors; ++i) {
-      ext_printf("(%lu: %u) ", (unsigned long int) (i + 1), variableCounts[i]);
+      ext_printf("(%lu: %u) ", static_cast<unsigned long int>(i + 1), variableCounts[i]);
       if ((i + 1) % 5 == 0) ext_printf("\n");
     }
     
@@ -719,7 +724,7 @@ namespace {
     uint32_t* numCutsPerVariable = const_cast<uint32_t*>(scratch.numCutsPerVariable);
     double** cutPoints = const_cast<double**>(scratch.cutPoints);
     for (size_t i = 0; i < data.numPredictors; ++i) {
-      numCutsPerVariable[i] = (uint32_t) -1;
+      numCutsPerVariable[i] = static_cast<uint32_t>(-1);
       cutPoints[i] = NULL;
     }
     
@@ -787,11 +792,11 @@ namespace {
       offset = step / 2;
     }
     
-    if (numCutsPerVariable != (uint32_t) -1) {
+    if (numCutsPerVariable != static_cast<uint32_t>(-1)) {
       if (numCuts < numCutsPerVariable) ext_throwError("Number of induced cut points in new predictor less than previous: old splits would be invalid.");
       if (numCuts > numCutsPerVariable) ext_issueWarning("Number of induced cut points in new predictor greater than previous: ignoring extra quantiles.");
     } else {
-      numCutsPerVariable = (uint32_t) numCuts;
+      numCutsPerVariable = static_cast<uint32_t>(numCuts);
       cutPoints = new double[numCuts];
     }
     
@@ -818,14 +823,14 @@ namespace {
       if (x_i > xMax) xMax = x_i;
     }
     
-    if (numCutsPerVariable == (uint32_t) -1) {
+    if (numCutsPerVariable == static_cast<uint32_t>(-1)) {
       numCutsPerVariable = maxNumCuts;
       cutPoints = new double[numCutsPerVariable];
     }
       
-    xIncrement = (xMax - xMin) / (double) (numCutsPerVariable + 1);
+    xIncrement = (xMax - xMin) / static_cast<double>(numCutsPerVariable + 1);
       
-    for (size_t i = 0; i < numCutsPerVariable; ++i) cutPoints[i] = xMin + ((double) (i + 1)) * xIncrement;
+    for (size_t i = 0; i < numCutsPerVariable; ++i) cutPoints[i] = xMin + (static_cast<double>(i + 1)) * xIncrement;
   }
   
   void setInitialFit(BARTFit& fit) {
@@ -998,7 +1003,7 @@ namespace {
     }
     
     double* variableCountSamples = results.variableCountSamples + simNum * data.numPredictors;
-    for (size_t i = 0; i < data.numPredictors; ++i) variableCountSamples[i] = (double) variableCounts[i];
+    for (size_t i = 0; i < data.numPredictors; ++i) variableCountSamples[i] = static_cast<double>(variableCounts[i]);
   }
   
   
@@ -1013,10 +1018,10 @@ namespace {
 
 #ifdef HAVE_GETTIMEOFDAY
   double subtractTimes(struct timeval end, struct timeval start) {
-    return (1.0e6 * ((double) (end.tv_sec - start.tv_sec)) + (double) (end.tv_usec - start.tv_usec)) / 1.0e6;
+    return (1.0e6 * (static_cast<double>(end.tv_sec - start.tv_sec)) + static_cast<double>(end.tv_usec - start.tv_usec)) / 1.0e6;
   }
 #else
-  double subtractTimes(time_t end, time_t start) { return (double) (end - start); }
+  double subtractTimes(time_t end, time_t start) { return static_cast<double>(end - start); }
 #endif
 }
 

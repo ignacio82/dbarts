@@ -6,7 +6,7 @@
 
 #include "node.hpp"
 
-#define TREE_AT(_V_, _I_, _S_) ((Tree*) ((char*) (_V_) + (_I_) * (_S_)))
+#define TREE_AT(_V_, _I_, _S_) reinterpret_cast<Tree*>(reinterpret_cast<char*>(_V_) + (_I_) * _S_)
 
 struct ext_binaryIO;
 struct ext_stringWriter;

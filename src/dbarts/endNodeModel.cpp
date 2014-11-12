@@ -82,7 +82,7 @@ namespace dbarts {
     {
       initializeMeanNormalModel(model);
       
-      double sigma = (control.responseIsBinary ? 3.0 : 0.5) /  (k * std::sqrt((double) control.numTrees));
+      double sigma = (control.responseIsBinary ? 3.0 : 0.5) /  (k * std::sqrt(static_cast<double>(control.numTrees)));
       model.precision = 1.0 / (sigma * sigma);
     }
     
@@ -110,19 +110,15 @@ namespace {
     switch (updateType) {
       case 0: // isTop && weights == NULL
       return ext_mt_computeVarianceForKnownMean(fit.threadManager, y, numObservations, average);
-      break;
       
       case 1: // !isTop && weights == NULL
       return ext_mt_computeIndexedVarianceForKnownMean(fit.threadManager, y, node.getObservationIndices(), numObservations, average);
-      break;
       
       case 2: // isTop && weights != NULL
       return ext_mt_computeWeightedVarianceForKnownMean(fit.threadManager, y, numObservations, fit.data.weights, average);
-      break;
       
       case 3: // !isTop && weights != NULL
       return ext_mt_computeIndexedWeightedVarianceForKnownMean(fit.threadManager, y, node.getObservationIndices(), numObservations, fit.data.weights, average);
-      break;
       
       default:
       break;
@@ -146,7 +142,7 @@ namespace {
     
     double result;
     result  = 0.5 * std::log(model.precision / (model.precision + dataPrecision));
-    result -= 0.5 * (var_y / residualVariance) * (double) (numObservationsInNode - 1);
+    result -= 0.5 * (var_y / residualVariance) * static_cast<double>(numObservationsInNode - 1);
     result -= 0.5 * ((model.precision * y_bar) * (dataPrecision * y_bar)) / (model.precision + dataPrecision);
     
     return result;
@@ -196,12 +192,12 @@ namespace {
     switch (updateType) {
       case 0: // isTop && weights == NULL
       scratch.average = ext_mt_computeMean(fit.threadManager, y, numObservations);
-      scratch.numEffectiveObservations = (double) numObservations;
+      scratch.numEffectiveObservations = static_cast<double>(numObservations);
       break;
       
       case 1: // !isTop && weights == NULL
       scratch.average = ext_mt_computeIndexedMean(fit.threadManager, y, node.getObservationIndices(), numObservations);
-      scratch.numEffectiveObservations = (double) numObservations;
+      scratch.numEffectiveObservations = static_cast<double>(numObservations);
       break;
       
       case 2: // isTop && weights != NULL
@@ -217,7 +213,7 @@ namespace {
     }
   }
   
-  void meanNormalUpdateScratchWithMemberships(const BARTFit&, const Node& node) {
+  void meanNormalUpdateScratchWithMemberships(const BARTFit&, const Node&) {
 
   }
   
@@ -277,7 +273,7 @@ namespace {
   };
   
   double linearRegressionNormalLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
-  double linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, double residualVariance);
+  double linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
 
   void linearRegressionNormalCreateScratch(const BARTFit& fit, Node& node);
   void linearRegressionNormalDeleteScratch(Node& node);
@@ -297,7 +293,7 @@ namespace {
 
 namespace dbarts {
   namespace EndNode {
-    LinearRegressionNormalModel* createLinearRegressionNormal(const BARTFit& fit)
+    LinearRegressionNormalModel* createLinearRegressionNormalModel(const BARTFit& fit)
     {
       LinearRegressionNormalModel* result = new LinearRegressionNormalModel;
     
@@ -498,12 +494,12 @@ namespace {
     for (size_t i = 0; i < numToPrint; ++i) ext_printf(" %f", scratch.coefficients[i]);
   }
   
-  void linearRegressionNormalUpdateScratchWithValues(const BARTFit& fit, const Node& node, const double* y)
+  void linearRegressionNormalUpdateScratchWithValues(const BARTFit&, const Node&, const double*)
   {
     
   }
   
-  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node) {
+  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit&, const Node&) {
     /* LinearRegressionNormalModel& model(*static_cast<LinearRegressionNormalModel*>(fit.model.endNodeModel));
     LinearRegressionNormalNodeScratch& scratch(*static_cast<LinearRegressionNormalNodeScratch*>(node.getScratch()));
     

@@ -3,8 +3,8 @@ INCLUDE_DIR=../include
 PKG_CPPFLAGS=-I$(INCLUDE_DIR)
 ALL_CPPFLAGS=$(R_XTRA_CPPFLAGS) $(PKG_CPPFLAGS) $(CPPFLAGS)
 
-LOCAL_SOURCES = binaryIO.c io.c linearAlgebra.c moments.c randomBase.c randomNorm.c random.c stringWriter.c thread.c
-LOCAL_OBJECTS = binaryIO.o io.o linearAlgebra.o moments.o randomBase.o randomNorm.o random.o stringWriter.o thread.o
+LOCAL_SOURCES=binaryIO.c io.c linearAlgebra.c moments.c randomBase.c randomNorm.c random.c stringWriter.c thread.c
+LOCAL_OBJECTS=binaryIO.o io.o linearAlgebra.o moments.o randomBase.o randomNorm.o random.o stringWriter.o thread.o
 
 all : libexternal.a
 

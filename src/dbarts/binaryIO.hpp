@@ -4,10 +4,10 @@
 struct ext_binaryIO;
 
 namespace dbarts {
+  struct BARTFit;
   struct Control;
   struct Data;
   struct Model;
-  struct BARTFit;
   
   bool writeControl(const Control& control, ext_binaryIO* bio);
   bool readControl(Control& control, ext_binaryIO* bio);

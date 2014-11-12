@@ -7,7 +7,7 @@
 
 #include <dbarts/types.hpp>
 
-#define NODE_AT(_V_, _I_, _S_) ((Node*) ((char*) (_V_) + (_I_) * _S_))
+#define NODE_AT(_V_, _I_, _S_) reinterpret_cast<Node*>(reinterpret_cast<char*>(_V_) + (_I_) * _S_)
 
 namespace dbarts {
   using std::size_t;
@@ -58,7 +58,8 @@ namespace dbarts {
     Node* parent;
     Node* leftChild;
     
-#define BART_INVALID_NODE_ENUM ((size_t) -1)
+#define BART_INVALID_NODE_ENUM static_cast<size_t>(-1)
+
     size_t enumerationIndex;
     bool* variablesAvailableForSplit;
     
@@ -165,7 +166,7 @@ namespace dbarts {
   inline Node* Node::getLeftChild() const { return const_cast<Node*>(leftChild); }
   inline Node* Node::getRightChild() const { return const_cast<Node*>(p.rightChild); }
   
-  inline void* Node::getScratch() const { return (void*) &p; }
+  inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<ParentMembers*>(&p)); }
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }

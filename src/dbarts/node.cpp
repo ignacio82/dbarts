@@ -38,7 +38,7 @@ namespace dbarts {
     if (fit.data.variableTypes[variableIndex] == CATEGORICAL) {
       // x is a double, but that is 64 bits wide, and as such we can treat it as
       // a 64 bit integer
-      uint32_t categoryId = (uint32_t) *((const uint64_t*) (x + variableIndex));
+      uint32_t categoryId = static_cast<uint32_t>(*(reinterpret_cast<const uint64_t*>(x + variableIndex)));
       
       return categoryGoesRight(categoryId);
     } else {
@@ -702,7 +702,7 @@ namespace dbarts {
   {
     if (childrenAreBottom()) return 1;
     if (isBottom()) return 0;
-    return (1 + (size_t) std::max(leftChild->getDepthBelow(), p.rightChild->getDepthBelow()));
+    return (1 + std::max(leftChild->getDepthBelow(), p.rightChild->getDepthBelow()));
   }
   
   size_t Node::getNumNodesBelow() const

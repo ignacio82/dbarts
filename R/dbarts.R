@@ -16,24 +16,23 @@ dbartsControl <-
            n.burn = 100L, n.trees = 200L, n.threads = 1L,
            n.thin = 1L, printEvery = 100L, printCutoffs = 0L, updateState = TRUE)
 {
-  matchedCall <- match.call()
+  result <- new("dbartsControl",
+                verbose = as.logical(verbose),
+                keepTrainingFits = as.logical(keepTrainingFits),
+                useQuantiles = as.logical(useQuantiles),
+                n.samples = coerceOrError(n.samples, "integer"),
+                n.burn = coerceOrError(n.burn, "integer"),
+                n.trees = coerceOrError(n.trees, "integer"),
+                n.threads = coerceOrError(n.threads, "integer"),
+                n.thin = coerceOrError(n.thin, "integer"),
+                printEvery = coerceOrError(printEvery, "integer"),
+                printCutoffs = coerceOrError(printCutoffs, "integer"),
+                updateState = as.logical(updateState))
   
-  argsToKeep <- names(formals(dbartsControl))
-  argsToKeep <- argsToKeep[argsToKeep != "n.cuts"]
-  
-  newCall <- call("new", "dbartsControl")
+  n.cuts <- coerceOrError(n.cuts, "integer")
+  if (n.cuts <= 0L) stop("'n.cuts' must be a positive integer")
+  attr(result, "n.cuts") <- n.cuts 
 
-  newRange <- seq_len(length(matchedCall) - 1L) + 2L
-  oldRange <- 1L + seq_len(length(matchedCall) - 1)
-  
-  newCall[newRange] <- matchedCall[oldRange]
-  names(newCall)[newRange] <- names(matchedCall)[oldRange]
-  
-  result <- eval(newCall, parent.frame())
-  attr(result, "n.cuts") <- as.integer(n.cuts)
-
-  if (attr(result, "n.cuts") <= 0L) stop("'n.cuts' must be a positive integer")
-  
   result
 }
 
@@ -56,7 +55,7 @@ validateArgumentsInEnvironment <- function(envir, control, verbose, n.samples, s
   if (!missing(n.samples)) {
     tryCatch(n.samples <- as.integer(n.samples), warning = function(e)
              stop("'n.samples' argument to dbarts must be coerceable to integer type"))
-    if (n.samples <= 0L) return("'n.samples' argument to dbarts must be a positive integer")
+    if (n.samples < 0L) return("'n.samples' argument to dbarts must be a non-negative integer")
     envir$control@n.samples <- n.samples
   } else if (controlIsMissing || is.na(control@n.samples)) {
     envir$control@n.samples <- formals(dbarts)[["n.samples"]]
@@ -139,7 +138,7 @@ dbartsSampler <-
                   data    <<- data
                   state   <<- NULL
                   pointer <<- .Call("dbarts_create", control, model, data)
-
+                  
                   callSuper(...)
                 },
                 run = function(numBurnIn, numSamples, updateState = NA) {
@@ -154,29 +153,40 @@ dbartsSampler <-
                   if ((is.na(updateState) && control@updateState == TRUE) || identical(updateState, TRUE))
                     storeState(ptr)
 
+                  if (is.null(samples)) return(invisible(NULL))
+                  
                   samples
                 },
                 copy = function(shallow = FALSE)
                 {
-                  newData <- data
-                  if (!shallow) {
-                    newData@x <- newData@x + 0
-                    if (!is.null(data@x.test)) newData@x.test <- newData@x.test + 0
-                  }
-                  dupe <- dbartsSampler$new(control, model, newData)
+                  dupe <-
+                    if (shallow) {
+                      dbartsSampler$new(control, model, data)
+                    } else {
+                      newData <- data
+                      ## only need to dupe things that can be changed internally, as the rest will be
+                      ## simply swapped out
+                      newData@x <- .Call("dbarts_deepCopy", data@x)
+                      if (!is.null(data@x.test)) {
+                        newData@x.test <- .Call("dbarts_deepCopy", data@x.test)
+                      }
+                      dupe <- dbartsSampler$new(control, model, newData)
+                    }
 
                   if (!is.null(state)) {
                     newState <- state
-                    newState@fit.tree <- newState@fit.tree + 0
-                    newState@fit.total <- newState@fit.total + 0
-                    if (!is.null(data@x.test)) newState@fit.test <- newState@fit.test + 0
-                    newState@sigma <- newState@sigma + 0
-                    newState@runningTime <- newState@runningTime + 0
-                    newState@trees <- paste0(newState@trees, "")
+                    newState@fit.tree <- .Call("dbarts_deepCopy", state@fit.tree)
+                    newState@fit.total <- .Call("dbarts_deepCopy", state@fit.total)
+                    if (!is.null(data@x.test)) {
+                      newState@fit.test <- .Call("dbarts_deepCopy", state@fit.test)
+                    }
+                    newState@sigma <- .Call("dbarts_deepCopy", state@sigma)
+                    newState@runningTime <- .Call("dbarts_deepCopy", state@runningTime)
+                    newState@trees <- .Call("dbarts_deepCopy", state@trees)
 
                     dupe$setState(newState)
                   }
-
+                  
                   dupe
                 },    
                 show = function() {
@@ -225,6 +235,7 @@ dbartsSampler <-
                 setResponse = function(y, updateState = NA) {
                   'Changes the response against which the sampler is fitted.'
                   ptr <- getPointer()
+                  
                   data@y <<- as.double(y)
                   .Call("dbarts_setResponse", ptr, data@y)
 
@@ -264,7 +275,7 @@ dbartsSampler <-
                       }
                     }
                   }
-                  
+
                   data@offset <<- offset
                   .Call("dbarts_setOffset", ptr, data@offset)
                   if (!identical(offset.test, NA)) {
@@ -278,7 +289,7 @@ dbartsSampler <-
                   invisible(NULL)
                 },
                 setPredictor = function(x, column, updateState = NA) {
-                  'Changes a single column of the predictor matrix. TRUE/FALSE returned as to whether or not the operation was successful.'
+                  'Changes a single column of the predictor matrix, or the entire matrix itself if the column argument is missing. TRUE/FALSE returned as to whether or not the operation was successful.'
 
                   columnIsMissing <- missing(column)
 
@@ -354,7 +365,7 @@ dbartsSampler <-
                      data@testUsesRegularOffset <<- FALSE
 
                      data@x.test <<- x.test
-                     data@offset.test <<- offset.test 
+                     data@offset.test <<- offset.test
                      .Call("dbarts_setTestPredictorAndOffset", ptr, data@x.test, data@offset.test)
                    } else {
                      data@x.test <<- x.test
@@ -369,7 +380,7 @@ dbartsSampler <-
                 setTestOffset = function(offset.test, updateState = NA) {
                   'Changes the test offset.'
                   ptr <- getPointer()
-                  
+
                   data@testUsesRegularOffset <<- FALSE
                   if (!is.null(offset.test)) {
                     if (is.null(data@x.test)) stop("when test matrix is NULL, test offset must be as well")

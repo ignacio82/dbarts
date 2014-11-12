@@ -66,7 +66,7 @@ namespace dbarts {
     if (numSwappableNodes == 0) return -1.0;
     
     // randomly choose a node with a swappable rule = parent
-    uint32_t nodeIndex = (uint32_t) ext_rng_simulateUnsignedIntegerUniformInRange(fit.control.rng, 0, numSwappableNodes);
+    uint32_t nodeIndex = static_cast<uint32_t>(ext_rng_simulateUnsignedIntegerUniformInRange(fit.control.rng, 0, numSwappableNodes));
     
     Node& parent(*swappableNodes[nodeIndex]);
     Node& leftChild(*parent.getLeftChild());
@@ -326,12 +326,12 @@ namespace {
     state.observationIndicesPtrs[nodeIndex] = node.observationIndices;
     state.numObservations[nodeIndex] = node.numObservations;
     state.observationIndices[nodeIndex] = new size_t[node.numObservations];
-    std::memcpy(state.observationIndices[nodeIndex], (const size_t*) node.observationIndices, node.numObservations * sizeof(size_t));
+    std::memcpy(state.observationIndices[nodeIndex], const_cast<const size_t*>(node.observationIndices), node.numObservations * sizeof(size_t));
 
     ++nodeIndex;
     
     if (node.isBottom()) {
-      fit.model.endNodeModel->storeScratch(node, (char*) state.scratches + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      fit.model.endNodeModel->storeScratch(node, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
       ++bottomNodeIndex;
       return;
     }
@@ -345,12 +345,12 @@ namespace {
 
     node.observationIndices = state.observationIndicesPtrs[nodeIndex];
     node.numObservations = state.numObservations[nodeIndex];
-    std::memcpy(node.observationIndices, (const size_t*) state.observationIndices[nodeIndex], state.numObservations[nodeIndex] * sizeof(size_t));
+    std::memcpy(node.observationIndices, const_cast<const size_t*>(state.observationIndices[nodeIndex]), state.numObservations[nodeIndex] * sizeof(size_t));
     
     ++nodeIndex;
     
     if (node.isBottom()) {
-      fit.model.endNodeModel->restoreScratch(node, (char*) state.scratches + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      fit.model.endNodeModel->restoreScratch(node, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
       ++bottomNodeIndex;
       return;
     }

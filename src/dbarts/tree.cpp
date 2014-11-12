@@ -175,7 +175,7 @@ namespace {
     
     
     errno = 0;
-    node.p.rule.variableIndex = (int32_t) std::strtol(buffer, NULL, 10);
+    node.p.rule.variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
     if (node.p.rule.variableIndex == 0 && errno != 0) return errno;
     
     // ext_throwError("unable to parse tree string: expected integer");
@@ -191,7 +191,7 @@ namespace {
     ++pos;
     
     errno = 0;
-    node.p.rule.splitIndex = (int32_t) strtol(buffer, NULL, 10);
+    node.p.rule.splitIndex = static_cast<int32_t>(strtol(buffer, NULL, 10));
     if (node.p.rule.splitIndex == 0 && errno != 0) return (*bytesRead = pos, ENOBUFS);
     
     node.leftChild    = Node::create(fit, node);
@@ -224,7 +224,7 @@ namespace {
     observationOffset = node.observationIndices - treeIndices;
     if (observationOffset < 0) {
       errorCode = EINVAL; goto write_node_cleanup;
-    } else if ((errorCode = ext_bio_writeSizeType(bio, (size_t) observationOffset)) != 0) goto write_node_cleanup;
+    } else if ((errorCode = ext_bio_writeSizeType(bio, static_cast<size_t>(observationOffset))) != 0) goto write_node_cleanup;
     
     if ((errorCode = ext_bio_writeSizeType(bio, node.enumerationIndex)) != 0) goto write_node_cleanup;
     if ((errorCode = ext_bio_writeSizeType(bio, node.numObservations)) != 0) goto write_node_cleanup;
@@ -237,15 +237,15 @@ namespace {
     if (node.leftChild != NULL) {
       nodeFlags += NODE_HAS_CHILDREN;
       
-      if ((errorCode = ext_bio_writeChar(bio, (char) nodeFlags)) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
-      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *((uint32_t*) &node.p.rule.variableIndex))) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *reinterpret_cast<const uint32_t*>(&node.p.rule.variableIndex))) != 0) goto write_node_cleanup;
       if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, node.p.rule.categoryDirections)) != 0) goto write_node_cleanup;
       
       if ((errorCode = writeNode(fit, *node.leftChild, bio, treeIndices))) goto write_node_cleanup;
       if ((errorCode = writeNode(fit, *node.p.rightChild, bio, treeIndices))) goto write_node_cleanup;
     } else {
-      if ((errorCode = ext_bio_writeChar(bio, (char) nodeFlags)) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
       if ((errorCode = fit.model.endNodeModel->writeScratch(node, bio)) != 0) goto write_node_cleanup;
     }
@@ -269,7 +269,7 @@ write_node_cleanup:
     
     if ((errorCode = ext_bio_readSizeType(bio, &observationOffset)) != 0) goto read_node_cleanup;
     if (observationOffset >= data.numObservations) { errorCode = EINVAL; goto read_node_cleanup; }
-    node.observationIndices = (size_t*) treeIndices + observationOffset;
+    node.observationIndices = const_cast<size_t*>(treeIndices) + observationOffset;
     
     if ((errorCode = ext_bio_readSizeType(bio, &node.enumerationIndex)) != 0) goto read_node_cleanup;
     if ((errorCode = ext_bio_readSizeType(bio, &node.numObservations)) != 0) goto read_node_cleanup;
@@ -279,12 +279,12 @@ write_node_cleanup:
       node.variablesAvailableForSplit[i] = (variablesAvailableForSplit & (1 << i)) != 0;
     }
     
-    if ((errorCode = ext_bio_readChar(bio, (char*) &nodeFlags)) != 0) goto read_node_cleanup;
+    if ((errorCode = ext_bio_readChar(bio, reinterpret_cast<char*>(&nodeFlags))) != 0) goto read_node_cleanup;
     
     if (nodeFlags > NODE_HAS_CHILDREN) { errorCode = EINVAL; goto read_node_cleanup; }
     
     if (nodeFlags & NODE_HAS_CHILDREN) {
-      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, (uint32_t*) &node.p.rule.variableIndex)) != 0) goto read_node_cleanup;
+      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, reinterpret_cast<uint32_t*>(&node.p.rule.variableIndex))) != 0) goto read_node_cleanup;
       if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.p.rule.categoryDirections)) != 0) goto read_node_cleanup;
       
       leftChild = dbarts::Node::create(fit, node);
