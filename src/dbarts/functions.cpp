@@ -49,9 +49,9 @@ namespace dbarts {
       leftChildRightIndex = rightIndex;
       rightChildRightIndex = rightIndex;
       
-      if (node->p.rule.variableIndex == variableIndex) {
-        leftChildRightIndex = node->p.rule.splitIndex - 1;
-        rightChildLeftIndex = node->p.rule.splitIndex + 1;
+      if (node->rule.variableIndex == variableIndex) {
+        leftChildRightIndex = node->rule.splitIndex - 1;
+        rightChildLeftIndex = node->rule.splitIndex + 1;
       }
       
       updateOrdinalVariablesAvailable(fit, node->getLeftChild(), variableIndex, leftChildLeftIndex, leftChildRightIndex);
@@ -75,11 +75,11 @@ namespace dbarts {
         rightChildCategories[i] = catGoesRight[i];
       }
       
-      if (node->p.rule.variableIndex == variableIndex) {
+      if (node->rule.variableIndex == variableIndex) {
         uint32_t categoryMask = 1u;
         for (size_t i = 0; i < numCategories; ++i) {
           if (catGoesRight[i] == true) {
-            if ((node->p.rule.categoryDirections & categoryMask) != 0) {
+            if ((node->rule.categoryDirections & categoryMask) != 0) {
               leftChildCategories[i] = false;
             } else {
               rightChildCategories[i] = false;
@@ -154,14 +154,14 @@ namespace dbarts {
     const Node* parent;
     while (!curr->isTop()) {
       parent = curr->parent;
-      if (parent->p.rule.variableIndex == variableIndex) {
+      if (parent->rule.variableIndex == variableIndex) {
         if (curr == parent->getLeftChild()) {
           for (uint32_t i = 0; i < numCategories; ++i) { // parent woulda taken this right, but we're left child
-            if (parent->p.rule.categoryGoesRight(i)) categoriesCanReachNode[i] = false;
+            if (parent->rule.categoryGoesRight(i)) categoriesCanReachNode[i] = false;
           }
         } else {
           for (uint32_t i = 0; i < numCategories; ++i) {
-            if (parent->p.rule.categoryGoesRight(i) == false) categoriesCanReachNode[i] = false;
+            if (parent->rule.categoryGoesRight(i) == false) categoriesCanReachNode[i] = false;
 
           }
         }
@@ -220,14 +220,14 @@ namespace dbarts {
       curr = curr->parent;
       
       // if you find the variable set the left or right
-      if (curr->p.rule.variableIndex == variableIndex) {
+      if (curr->rule.variableIndex == variableIndex) {
         if (isRightChild && !leftFound) {
           leftFound = true;
-          *leftIndex = curr->p.rule.splitIndex + 1;
+          *leftIndex = curr->rule.splitIndex + 1;
         }
         if (!isRightChild && !rightFound) {
           rightFound = true;
-          *rightIndex = curr->p.rule.splitIndex - 1;
+          *rightIndex = curr->rule.splitIndex - 1;
         }
       }
     }

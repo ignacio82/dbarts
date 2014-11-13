@@ -52,15 +52,10 @@ namespace {
 }
 
 namespace dbarts {
-/*  void Tree::updateBottomNodesWithValues(const BARTFit& fit, const double* r) {
-    NodeVector bottomNodes(getBottomVector());
-    
-    size_t numBottomNodes = bottomNodes.size();
-    
-    for (size_t i = 0; i < numBottomNodes; ++i) bottomNodes[i]->updateWithValues(fit, r);
-  }*/
+  // void Tree::drawFromEndNodePosteriorsAndSetFits(const BARTFit& fit, const double* y, double residualVariance)
+  // void Tree::
   
-  void Tree::sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits)
+  void Tree::sampleAveragesAndSetFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
   {
     NodeVector bottomNodes(getAndEnumerateBottomVector());
     size_t numBottomNodes = bottomNodes.size();
@@ -72,10 +67,10 @@ namespace dbarts {
     for (size_t i = 0; i < numBottomNodes; ++i) {
       const Node& bottomNode(*bottomNodes[i]);
       
-      double posteriorPrediction = bottomNode.drawFromPosterior(fit, fit.state.sigma * fit.state.sigma);
-      bottomNode.setPredictions(trainingFits, posteriorPrediction);
+      bottomNode.drawFromPosterior(fit, y, fit.state.sigma * fit.state.sigma);
+      bottomNode.getPredictions(fit, NULL, NULL, trainingFits);
       
-      if (testFits != NULL) nodePosteriorPredictions[i] = posteriorPrediction;
+      if (testFits != NULL) nodePosteriorPredictions[i] = trainingFits[bottomNode.isTop() ? 0 : bottomNode.observationIndices[0]];
     }
     
     if (testFits != NULL) {
@@ -115,7 +110,9 @@ namespace dbarts {
       for (size_t i = 0; i < numBottomNodes; ++i) {
         const Node& bottomNode(*bottomNodes[i]);
         
-        bottomNode.setPredictions(trainingFits, posteriorPredictions[i]);
+        // bottomNode.setPosterior
+        *static_cast<double*>(bottomNode.getScratch()) = posteriorPredictions[i];
+        bottomNode.getPredictions(fit, NULL, NULL, trainingFits);
       }
     }
     
@@ -145,9 +142,9 @@ namespace {
     if (node.isBottom()) return ext_swr_writeChar(writer, '.');
     
     int errorCode = 0;
-    if ((errorCode = ext_swr_write32BitInteger(writer, node.p.rule.variableIndex)) != 0) return errorCode;
+    if ((errorCode = ext_swr_write32BitInteger(writer, node.rule.variableIndex)) != 0) return errorCode;
     if ((errorCode = ext_swr_writeChar(writer, ' ')) != 0) return errorCode;
-    if ((errorCode = ext_swr_write32BitInteger(writer, node.p.rule.splitIndex)) != 0) return errorCode;
+    if ((errorCode = ext_swr_write32BitInteger(writer, node.rule.splitIndex)) != 0) return errorCode;
     if ((errorCode = ext_swr_writeChar(writer, ' ')) != 0) return errorCode;
     
     if ((errorCode = writeNode(writer, *node.getLeftChild())) != 0) return errorCode;
@@ -175,8 +172,8 @@ namespace {
     
     
     errno = 0;
-    node.p.rule.variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
-    if (node.p.rule.variableIndex == 0 && errno != 0) return errno;
+    node.rule.variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
+    if (node.rule.variableIndex == 0 && errno != 0) return errno;
     
     // ext_throwError("unable to parse tree string: expected integer");
     // ext_throwError("unable to parse tree string: %s", strerror(errno));
@@ -191,11 +188,11 @@ namespace {
     ++pos;
     
     errno = 0;
-    node.p.rule.splitIndex = static_cast<int32_t>(strtol(buffer, NULL, 10));
-    if (node.p.rule.splitIndex == 0 && errno != 0) return (*bytesRead = pos, ENOBUFS);
+    node.rule.splitIndex = static_cast<int32_t>(strtol(buffer, NULL, 10));
+    if (node.rule.splitIndex == 0 && errno != 0) return (*bytesRead = pos, ENOBUFS);
     
     node.leftChild    = Node::create(fit, node);
-    node.p.rightChild = Node::create(fit, node);
+    node.rightChild = Node::create(fit, node);
     
     size_t childBytesRead;
     
@@ -239,11 +236,11 @@ namespace {
       
       if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
-      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *reinterpret_cast<const uint32_t*>(&node.p.rule.variableIndex))) != 0) goto write_node_cleanup;
-      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, node.p.rule.categoryDirections)) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *reinterpret_cast<const uint32_t*>(&node.rule.variableIndex))) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, node.rule.categoryDirections)) != 0) goto write_node_cleanup;
       
       if ((errorCode = writeNode(fit, *node.leftChild, bio, treeIndices))) goto write_node_cleanup;
-      if ((errorCode = writeNode(fit, *node.p.rightChild, bio, treeIndices))) goto write_node_cleanup;
+      if ((errorCode = writeNode(fit, *node.rightChild, bio, treeIndices))) goto write_node_cleanup;
     } else {
       if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
@@ -284,15 +281,15 @@ write_node_cleanup:
     if (nodeFlags > NODE_HAS_CHILDREN) { errorCode = EINVAL; goto read_node_cleanup; }
     
     if (nodeFlags & NODE_HAS_CHILDREN) {
-      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, reinterpret_cast<uint32_t*>(&node.p.rule.variableIndex))) != 0) goto read_node_cleanup;
-      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.p.rule.categoryDirections)) != 0) goto read_node_cleanup;
+      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, reinterpret_cast<uint32_t*>(&node.rule.variableIndex))) != 0) goto read_node_cleanup;
+      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.rule.categoryDirections)) != 0) goto read_node_cleanup;
       
       leftChild = dbarts::Node::create(fit, node);
       node.leftChild = leftChild;
       if ((errorCode = readNode(fit, *leftChild, bio, treeIndices)) != 0) goto read_node_cleanup;
       
       rightChild = dbarts::Node::create(fit, node);
-      node.p.rightChild = rightChild;
+      node.rightChild = rightChild;
       if ((errorCode = readNode(fit, *rightChild, bio, treeIndices)) != 0) goto read_node_cleanup;
     } else {
       node.leftChild = NULL;
@@ -324,8 +321,7 @@ namespace dbarts {
     if (errorCode != 0) return errorCode;
     
     if (!isBottom()) {
-      updateVariablesAvailable(fit, *this, p.rule.variableIndex);
-      //updateMemberships(fit);
+      updateVariablesAvailable(fit, *this, rule.variableIndex);
     }
     updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     
@@ -341,8 +337,8 @@ namespace dbarts {
     if (errorCode != 0) return errorCode;
     
     if (!isBottom()) {
-      updateVariablesAvailable(fit, *this, p.rule.variableIndex);
-    } // updateMemberships(fit);
+      updateVariablesAvailable(fit, *this, rule.variableIndex);
+    }
     updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     
     return 0;

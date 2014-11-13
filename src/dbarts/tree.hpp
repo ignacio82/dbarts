@@ -19,7 +19,7 @@ namespace dbarts {
   struct TreeContentBackup;
   
   struct Tree : Node {
-    void sampleAveragesAndSetFits(const BARTFit& fit, double* trainingFits, double* testFits);
+    void sampleAveragesAndSetFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits);
     double* recoverAveragesFromFits(const BARTFit& fit, const double* treeFits); // allocates response; are ordered as bottom nodes are
     void setCurrentFitsFromAverages(const BARTFit& fit, const double* posteriorPredictions, double* trainingFits, double* testFits);
     

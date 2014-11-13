@@ -2,6 +2,7 @@
 #define DBARTS_END_NODE_MODEL_HPP
 
 #include <cstddef>
+#include "cstdint.hpp"
 
 struct ext_binaryIO;
 
@@ -23,16 +24,20 @@ namespace dbarts {
   namespace EndNode {
     enum Options {
       NONE = 0x0,
-      CONDITIONALLY_INTEGRABLE = 0x1, // should use log-integrated likelihood functions
+      CONDITIONALLY_INTEGRABLE = 0x1, // should use log-integrated likelihood functions; otherwise log-prior
+      PREDICTION_IS_CONSTANT   = 0x2, // uses dirty tricks to avoid a lot of unnecessary calls
       INVALID = 0x2
     };
     
     struct Model {
       std::size_t perNodeScratchSize;
-      Options info;
+      std::uint32_t info;
       
+      double (*computeLogPrior)(const BARTFit& fit, const Node& node);
       double (*computeLogIntegratedLikelihood)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
-      double (*drawFromPosterior)(const BARTFit& fit, const Node& node, double residualVariance);
+      void (*drawFromPrior)(const BARTFit& fit, const Node& node);
+      void (*drawFromPosterior)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+      void (*getPredictions)(const BARTFit& fit, const Node& node, const double* y, const double* x, double* y_hat);
       
       void (*createScratch)(const BARTFit& fit, Node& node);
       void (*deleteScratch)(Node& node);

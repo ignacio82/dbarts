@@ -3,7 +3,7 @@
 
 #include <cmath>     // sqrt
 #include <cstring>   // memcpy
-#include <cstddef>   // size_t
+#include <cstddef>   // size_t, offsetof
 
 #if !defined(HAVE_SYS_TIME_H) && defined(HAVE_GETTIMEOFDAY)
 #undef HAVE_GETTIMEOFDAY
@@ -354,12 +354,10 @@ namespace dbarts {
   BARTFit::BARTFit(Control control, Model model, Data data) :
     control(control), model(model), data(data), scratch(), state(), threadManager(NULL)
   {
-    if (model.endNodeModel->perNodeScratchSize <= sizeof(ParentMembers)) {
+    if (model.endNodeModel->perNodeScratchSize <= (sizeof(Node) - offsetof(Node, rightChild))) {
       scratch.nodeSize = sizeof(Node);
     } else {
-      // however many chars the parent members are in from the root is the base
-      ptrdiff_t signedNodeSize = reinterpret_cast<char*>(&reinterpret_cast<Node*>(NULL)->p) - reinterpret_cast<char*>(NULL);
-      scratch.nodeSize = static_cast<size_t>(signedNodeSize >= 0 ? signedNodeSize : -signedNodeSize) + model.endNodeModel->perNodeScratchSize;
+      scratch.nodeSize = offsetof(Node, rightChild) + model.endNodeModel->perNodeScratchSize;
     }
     
     allocateMemory(*this);
@@ -490,7 +488,7 @@ namespace dbarts {
         } */
         // state.trees[i].top.print(*this);
         
-        tree_i.sampleAveragesAndSetFits(*this, currFits, isThinningIteration ? NULL : currTestFits);
+        tree_i.sampleAveragesAndSetFits(*this, scratch.treeY, currFits, isThinningIteration ? NULL : currTestFits);
         
         // totalFits += currFits - oldTreeFits
         ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), data.numObservations, -1.0, state.totalFits);

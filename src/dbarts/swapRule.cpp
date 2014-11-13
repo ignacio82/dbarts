@@ -73,12 +73,12 @@ namespace dbarts {
     Node& rightChild(*parent.getRightChild());
     
     bool leftHasRule = false, rightHasRule = false;
-    if ( !leftChild.isBottom() &&  leftChild.p.rule.variableIndex != DBARTS_INVALID_RULE_VARIABLE) leftHasRule  = true;
-    if (!rightChild.isBottom() && rightChild.p.rule.variableIndex != DBARTS_INVALID_RULE_VARIABLE) rightHasRule = true;
+    if ( !leftChild.isBottom() &&  leftChild.rule.variableIndex != DBARTS_INVALID_RULE_VARIABLE) leftHasRule  = true;
+    if (!rightChild.isBottom() && rightChild.rule.variableIndex != DBARTS_INVALID_RULE_VARIABLE) rightHasRule = true;
     
     if (!leftHasRule && !rightHasRule) ext_throwError("error in SwapRule: neither child of parent has a rule\n");
     
-    bool childrenHaveSameRule = leftHasRule && rightHasRule && leftChild.p.rule.equals(rightChild.p.rule);
+    bool childrenHaveSameRule = leftHasRule && rightHasRule && leftChild.rule.equals(rightChild.rule);
     
     if (!childrenHaveSameRule) {
       //find out which children have rules and pick one
@@ -100,16 +100,16 @@ namespace dbarts {
       Node& child(*childPtr);
       
       // swap rules between parent and child and test that no conflicts arise from doing so
-      parent.p.rule.swapWith(child.p.rule);
+      parent.rule.swapWith(child.rule);
       
-      int32_t parentVariableIndex = parent.p.rule.variableIndex;
-      int32_t childVariableIndex  = child.p.rule.variableIndex;
+      int32_t parentVariableIndex = parent.rule.variableIndex;
+      int32_t childVariableIndex  = child.rule.variableIndex;
       
       bool swapIsSensible = ruleIsValid(fit, parent, parentVariableIndex);
       if (parentVariableIndex != childVariableIndex && swapIsSensible) swapIsSensible = ruleIsValid(fit, parent, childVariableIndex);
       
       // swap back to calculate probabilities
-      parent.p.rule.swapWith(child.p.rule);
+      parent.rule.swapWith(child.rule);
       
       //if the swap was ok (rules made sense)
       if (swapIsSensible) {
@@ -119,14 +119,14 @@ namespace dbarts {
         double XLogPi = fit.model.treePrior->computeTreeLogProbability(fit, tree);
         double XLogL = computeLogLikelihoodForBranch(fit, parent, y);
         
-        parent.p.rule.swapWith(child.p.rule);
+        parent.rule.swapWith(child.rule);
         
         // parent.updateMembershipsAndValues(fit, y);
         parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         //  fix VarAvail
-        parentVariableIndex = parent.p.rule.variableIndex;
-        childVariableIndex  =  child.p.rule.variableIndex;
+        parentVariableIndex = parent.rule.variableIndex;
+        childVariableIndex  =  child.rule.variableIndex;
         updateVariablesAvailable(fit, parent, parentVariableIndex);
         if (parentVariableIndex != childVariableIndex) updateVariablesAvailable(fit, parent, childVariableIndex);
         
@@ -148,25 +148,25 @@ namespace dbarts {
         alpha = -1.0; //not a legal swap	
       }
     } else {
-      Rule oldRightChildRule = rightChild.p.rule;
+      Rule oldRightChildRule = rightChild.rule;
       // std::memcpy(&oldRightChildRule, &parent.rightChild->rule, sizeof(Rule));
       
-      parent.p.rule.swapWith(leftChild.p.rule);
+      parent.rule.swapWith(leftChild.rule);
       // temporarily just copy in left rule; give ownership over memory if step not rejected
-      rightChild.p.rule = leftChild.p.rule;
+      rightChild.rule = leftChild.rule;
       // std::memcpy(&parent.rightChild->rule, &parent.leftChild->rule, sizeof(Rule));
       
       //check if rule is ok
-      int32_t parentVariableIndex = parent.p.rule.variableIndex;
-      int32_t childVariableIndex  = leftChild.p.rule.variableIndex;
+      int32_t parentVariableIndex = parent.rule.variableIndex;
+      int32_t childVariableIndex  = leftChild.rule.variableIndex;
       
       bool swapIsSensible = ruleIsValid(fit, parent, parentVariableIndex);
       if (parentVariableIndex != childVariableIndex && swapIsSensible) swapIsSensible = ruleIsValid(fit, parent, childVariableIndex);
       
       if (swapIsSensible) {
         // swap back to calculate probabilities
-        parent.p.rule.swapWith(leftChild.p.rule);
-        rightChild.p.rule = leftChild.p.rule;
+        parent.rule.swapWith(leftChild.rule);
+        rightChild.rule = leftChild.rule;
         // std::memcpy(&parent.rightChild->rule, &parent.leftChild->rule, sizeof(Rule));
         
         ::State oldState;
@@ -175,16 +175,16 @@ namespace dbarts {
         double XLogPi = fit.model.treePrior->computeTreeLogProbability(fit, tree);
         double XLogL = computeLogLikelihoodForBranch(fit, parent, y);
         
-        parent.p.rule.swapWith(leftChild.p.rule);
-        rightChild.p.rule = leftChild.p.rule;
+        parent.rule.swapWith(leftChild.rule);
+        rightChild.rule = leftChild.rule;
         // std::memcpy(&parent.rightChild->rule, &parent.leftChild->rule, sizeof(Rule));
         
         // parent.updateMembershipsAndValues(fit, y);
         parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         //  fix VarAvail
-        childVariableIndex = leftChild.p.rule.variableIndex;
-        parentVariableIndex = parent.p.rule.variableIndex;
+        childVariableIndex = leftChild.rule.variableIndex;
+        parentVariableIndex = parent.rule.variableIndex;
         updateVariablesAvailable(fit, parent, parentVariableIndex);
         if (parentVariableIndex != childVariableIndex) updateVariablesAvailable(fit, parent, childVariableIndex);
         
@@ -197,21 +197,21 @@ namespace dbarts {
         if (ext_rng_simulateBernoulli(fit.control.rng, alpha) == 1) {
           oldState.destroy();
           // accept, so make right rule copy deep and trash old
-          rightChild.p.rule.copyFrom(leftChild.p.rule);
+          rightChild.rule.copyFrom(leftChild.rule);
           
           *stepTaken = true;
         } else {
           oldState.restore(fit, parent);
           // reject, so copy back in old right rule
-          rightChild.p.rule = oldRightChildRule;
+          rightChild.rule = oldRightChildRule;
           // std::memcpy(&parent.rightChild->rule, &oldRightChildRule, sizeof(Rule));
           
           *stepTaken = false;
         }
       } else {
         // checkrule failed, swap back
-        parent.p.rule.swapWith(leftChild.p.rule);
-        rightChild.p.rule = oldRightChildRule;
+        parent.rule.swapWith(leftChild.rule);
+        rightChild.rule = oldRightChildRule;
         // std::memcpy(&parent.rightChild->rule, &oldRightChildRule, sizeof(Rule));
         
         alpha = -1.0;
@@ -236,10 +236,10 @@ namespace dbarts {
       rightChildCategories[i] = catGoesRight[i];
     }
     
-    if (node.p.rule.variableIndex == variableIndex) {
+    if (node.rule.variableIndex == variableIndex) {
       for (uint32_t i = 0; i < numCategories; ++i) {
         if (catGoesRight[i] == true) {
-          if (node.p.rule.categoryGoesRight(i)) {
+          if (node.rule.categoryGoesRight(i)) {
             leftChildCategories[i] = false;
           } else {
             rightChildCategories[i] = false;
@@ -274,10 +274,10 @@ namespace dbarts {
   {
     if (node.isBottom()) return true;
 
-    int32_t ruleVariableIndex = node.p.rule.variableIndex;
+    int32_t ruleVariableIndex = node.rule.variableIndex;
 
     if (ruleVariableIndex == variableIndex) {
-      int32_t splitIndex = node.p.rule.splitIndex;
+      int32_t splitIndex = node.rule.splitIndex;
       
       if (splitIndex < leftIndex || splitIndex > rightIndex) return false;
       
@@ -362,7 +362,7 @@ namespace {
   }
   
   void ::State::store(const BARTFit& fit, const Node& node) {
-    parentRule = node.p.rule;
+    parentRule = node.rule;
                 
     size_t numBottomNodes = node.getNumBottomNodes();
     
@@ -391,8 +391,8 @@ namespace {
   }
   
   void State::restore(const BARTFit& fit, Node& node) {
-    bool leftWasSwapped = parentRule.equals(node.getLeftChild()->p.rule);
-    node.p.rule.swapWith(leftWasSwapped ? node.getLeftChild()->p.rule : node.getRightChild()->p.rule);
+    bool leftWasSwapped = parentRule.equals(node.getLeftChild()->rule);
+    node.rule.swapWith(leftWasSwapped ? node.getLeftChild()->rule : node.getRightChild()->rule);
     
     size_t nodeIndex = 0, bottomNodeIndex = 0;
     restoreTree(*this, fit, node, nodeIndex, bottomNodeIndex);

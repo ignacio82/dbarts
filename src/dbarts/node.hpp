@@ -47,11 +47,6 @@ namespace dbarts {
   
   struct Node;
   
-  struct ParentMembers {
-    Node* rightChild;
-    Rule rule;
-  };
-  
   typedef std::vector<Node*> NodeVector;
 
   struct Node {
@@ -66,11 +61,13 @@ namespace dbarts {
     size_t* observationIndices;
     size_t numObservations;
     
-    ParentMembers p; // has to be last member; is actually a union
+    // these two have to be the lasts member; are actually a union
+    // and not used in end-nodes
+    Node* rightChild;
+    Rule rule;
     
     // these are static because the size is actually determined by fit, and thus calling a constructor
     // won't allocate the correct amount
-    // static Node* create(const BARTFit& fit, size_t* observationIndices, size_t numObservations);
     static Node* create(const BARTFit& fit, const Node& parent);
     
     static void initialize(const BARTFit& fit, Node& node, size_t* observationIndices, size_t numObservations);
@@ -83,11 +80,6 @@ namespace dbarts {
 #define BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED 0x4
     void updateState(const BARTFit& fit, const double* y, uint32_t updateType);
     
-/*     void updateWithValues(const BARTFit& fit, const double* y); // call this only on a bottom node
-    void updateBottomNodesWithValues(const BARTFit& fit, const double* y); // call anywhere and it'll recurse
-    
-    void updateMemberships(const BARTFit& fit);
-    void updateMembershipsAndValues(const BARTFit& fit, const double* y); */
     
     // deep copies
     void copyFrom(const BARTFit& fit, const Node& other);
@@ -118,8 +110,7 @@ namespace dbarts {
     Node* findBottomNode(const BARTFit& fit, const double* x) const;
         
     void print(const BARTFit& fit) const;
-        
-//    double computeVariance(const BARTFit& fit, const double* y, double average) const;
+    
     
     size_t getNumObservations() const;
     const size_t* getObservationIndices() const;
@@ -130,8 +121,8 @@ namespace dbarts {
     
     void clear(const BARTFit& fit);
     
-    double drawFromPosterior(const BARTFit& fit, double residualVariance) const;
-    void setPredictions(double* y_hat, double prediction) const;
+    void drawFromPosterior(const BARTFit& fit, const double* y, double residualVariance) const;
+    void getPredictions(const BARTFit& fit, const double* y, const double* x, double* y_hat) const;
         
     size_t getDepth() const;
     size_t getDepthBelow() const;
@@ -165,13 +156,13 @@ namespace dbarts {
   // relied on
   inline bool Node::isTop() const { return parent == NULL; }
   inline bool Node::isBottom() const { return leftChild == NULL; }
-  inline bool Node::childrenAreBottom() const { return leftChild != NULL && leftChild->leftChild == NULL && p.rightChild->leftChild == NULL; }
+  inline bool Node::childrenAreBottom() const { return leftChild != NULL && leftChild->leftChild == NULL && rightChild->leftChild == NULL; }
   
   inline Node* Node::getParent() const { return const_cast<Node*>(parent); }
   inline Node* Node::getLeftChild() const { return const_cast<Node*>(leftChild); }
-  inline Node* Node::getRightChild() const { return const_cast<Node*>(p.rightChild); }
+  inline Node* Node::getRightChild() const { return const_cast<Node*>(rightChild); }
   
-  inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<ParentMembers*>(&p)); }
+  inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<Node**>(&rightChild)); }
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }

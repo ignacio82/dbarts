@@ -27,7 +27,8 @@ namespace {
   };
   
   double meanNormalLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
-  double meanNormalDrawFromPosterior(const BARTFit& fit, const Node& node, double residualVariance);
+  void meanNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+  void meanNormalGetPredictions(const BARTFit& fit, const Node& node, const double* y, const double* x, double* y_hat);
   
   void meanNormalCreateScratch(const BARTFit& fit, Node& node);
   void meanNormalDeleteScratch(Node& node);
@@ -50,12 +51,13 @@ namespace dbarts {
   namespace EndNode {
     void initializeMeanNormalModel(MeanNormalModel& model)
     {
-      model.info = CONDITIONALLY_INTEGRABLE;
+      model.info = CONDITIONALLY_INTEGRABLE | PREDICTION_IS_CONSTANT;
       model.perNodeScratchSize = sizeof(MeanNormalNodeScratch);
       model.precision = 1.0;
       
       model.computeLogIntegratedLikelihood = &meanNormalLogIntegratedLikelihood;
       model.drawFromPosterior = &meanNormalDrawFromPosterior;
+      model.getPredictions = &meanNormalGetPredictions;
       model.createScratch = &meanNormalCreateScratch;
       model.deleteScratch = &meanNormalDeleteScratch;
       model.copyScratch = &meanNormalCopyScratch;
@@ -148,16 +150,22 @@ namespace {
     return result;
   }
   
-  double meanNormalDrawFromPosterior(const BARTFit& fit, const Node& node, double residualVariance) {
+  void meanNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double*, double residualVariance) {
     const MeanNormalModel& model(*static_cast<const MeanNormalModel*>(fit.model.endNodeModel));
-    const MeanNormalNodeScratch& scratch(*static_cast<const MeanNormalNodeScratch*>(node.getScratch()));
+    MeanNormalNodeScratch& scratch(*static_cast<MeanNormalNodeScratch*>(node.getScratch()));
     
     double posteriorPrecision = scratch.numEffectiveObservations / residualVariance;
   
     double posteriorMean = posteriorPrecision * scratch.average / (model.precision + posteriorPrecision);
     double posteriorSd   = 1.0 / std::sqrt(model.precision + posteriorPrecision);
   
-    return posteriorMean + posteriorSd * ext_rng_simulateStandardNormal(fit.control.rng);
+    scratch.average = posteriorMean + posteriorSd * ext_rng_simulateStandardNormal(fit.control.rng);
+  }
+  
+  void meanNormalGetPredictions(const BARTFit&, const Node& node, const double*, const double*, double* y_hat)
+  {
+    const MeanNormalNodeScratch& scratch(*static_cast<const MeanNormalNodeScratch*>(node.getScratch()));
+    *y_hat = scratch.average;
   }
   
   void meanNormalCreateScratch(const BARTFit&, Node&) {
@@ -273,7 +281,7 @@ namespace {
   };
   
   double linearRegressionNormalLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
-  double linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+  void linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
 
   void linearRegressionNormalCreateScratch(const BARTFit& fit, Node& node);
   void linearRegressionNormalDeleteScratch(Node& node);
@@ -309,7 +317,7 @@ namespace dbarts {
       model.precisions = NULL;
       
       model.computeLogIntegratedLikelihood = &linearRegressionNormalLogIntegratedLikelihood;
-      // model.drawFromPosterior = &linearRegressNormalDrawFromPosterior;
+      model.drawFromPosterior = &linearRegressionNormalDrawFromPosterior;
       model.createScratch = &linearRegressionNormalCreateScratch;
       model.deleteScratch = &linearRegressionNormalDeleteScratch;
       model.copyScratch = &linearRegressionNormalCopyScratch;
@@ -359,7 +367,7 @@ namespace {
   double* createXtForNode(const BARTFit& fit, const Node& node);
   double* createCovarianceRightFactor(const BARTFit& fit, const Node& node, const double* Xt);
   
-  double linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* allY, double residualVariance)
+  void linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* allY, double residualVariance)
   {
     const LinearRegressionNormalModel& model(*static_cast<const LinearRegressionNormalModel*>(fit.model.endNodeModel));
     LinearRegressionNormalNodeScratch& scratch(*static_cast<LinearRegressionNormalNodeScratch*>(node.getScratch()));
@@ -397,8 +405,6 @@ namespace {
     if (!node.isTop()) delete [] y;
     delete [] R;
     delete [] Xt;
-    
-    return 0.0;
   }
   
   double linearRegressionNormalLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double* allY, double residualVariance)
