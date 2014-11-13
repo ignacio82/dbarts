@@ -44,7 +44,7 @@ namespace {
     for (size_t i = 0; i < numObservations; ++i) {
       const Node* bottomNode = top.findBottomNode(fit, Xt + i * fit.data.numPredictors);
       
-      map[i] = bottomNode->enumerationIndex;
+      map[i] = bottomNode->getEnumerationIndex();
     }
     
     return map;
@@ -142,9 +142,9 @@ namespace {
     if (node.isBottom()) return ext_swr_writeChar(writer, '.');
     
     int errorCode = 0;
-    if ((errorCode = ext_swr_write32BitInteger(writer, node.rule.variableIndex)) != 0) return errorCode;
+    if ((errorCode = ext_swr_write32BitInteger(writer, node.getRule().variableIndex)) != 0) return errorCode;
     if ((errorCode = ext_swr_writeChar(writer, ' ')) != 0) return errorCode;
-    if ((errorCode = ext_swr_write32BitInteger(writer, node.rule.splitIndex)) != 0) return errorCode;
+    if ((errorCode = ext_swr_write32BitInteger(writer, node.getRule().splitIndex)) != 0) return errorCode;
     if ((errorCode = ext_swr_writeChar(writer, ' ')) != 0) return errorCode;
     
     if ((errorCode = writeNode(writer, *node.getLeftChild())) != 0) return errorCode;
@@ -172,8 +172,8 @@ namespace {
     
     
     errno = 0;
-    node.rule.variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
-    if (node.rule.variableIndex == 0 && errno != 0) return errno;
+    node.getRule().variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
+    if (node.getRule().variableIndex == 0 && errno != 0) return errno;
     
     // ext_throwError("unable to parse tree string: expected integer");
     // ext_throwError("unable to parse tree string: %s", strerror(errno));
@@ -188,11 +188,11 @@ namespace {
     ++pos;
     
     errno = 0;
-    node.rule.splitIndex = static_cast<int32_t>(strtol(buffer, NULL, 10));
-    if (node.rule.splitIndex == 0 && errno != 0) return (*bytesRead = pos, ENOBUFS);
+    node.getRule().splitIndex = static_cast<int32_t>(strtol(buffer, NULL, 10));
+    if (node.getRule().splitIndex == 0 && errno != 0) return (*bytesRead = pos, ENOBUFS);
     
     node.leftChild    = Node::create(fit, node);
-    node.rightChild = Node::create(fit, node);
+    node.p.rightChild = Node::create(fit, node);
     
     size_t childBytesRead;
     
@@ -223,7 +223,6 @@ namespace {
       errorCode = EINVAL; goto write_node_cleanup;
     } else if ((errorCode = ext_bio_writeSizeType(bio, static_cast<size_t>(observationOffset))) != 0) goto write_node_cleanup;
     
-    if ((errorCode = ext_bio_writeSizeType(bio, node.enumerationIndex)) != 0) goto write_node_cleanup;
     if ((errorCode = ext_bio_writeSizeType(bio, node.numObservations)) != 0) goto write_node_cleanup;
     
     for (size_t i = 0; i < data.numPredictors; ++i) {
@@ -236,14 +235,15 @@ namespace {
       
       if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
-      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *reinterpret_cast<const uint32_t*>(&node.rule.variableIndex))) != 0) goto write_node_cleanup;
-      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, node.rule.categoryDirections)) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, *reinterpret_cast<const uint32_t*>(&node.getRule().variableIndex))) != 0) goto write_node_cleanup;
+      if ((errorCode = ext_bio_writeUnsigned32BitInteger(bio, node.getRule().categoryDirections)) != 0) goto write_node_cleanup;
       
-      if ((errorCode = writeNode(fit, *node.leftChild, bio, treeIndices))) goto write_node_cleanup;
-      if ((errorCode = writeNode(fit, *node.rightChild, bio, treeIndices))) goto write_node_cleanup;
+      if ((errorCode = writeNode(fit, *node.getLeftChild(), bio, treeIndices))) goto write_node_cleanup;
+      if ((errorCode = writeNode(fit, *node.getRightChild(), bio, treeIndices))) goto write_node_cleanup;
     } else {
       if ((errorCode = ext_bio_writeChar(bio, *reinterpret_cast<char*>(&nodeFlags))) != 0) goto write_node_cleanup;
       
+      if ((errorCode = ext_bio_writeSizeType(bio, node.getEnumerationIndex())) != 0) goto write_node_cleanup;
       if ((errorCode = fit.model.endNodeModel->writeScratch(node, bio)) != 0) goto write_node_cleanup;
     }
     
@@ -268,7 +268,6 @@ write_node_cleanup:
     if (observationOffset >= data.numObservations) { errorCode = EINVAL; goto read_node_cleanup; }
     node.observationIndices = const_cast<size_t*>(treeIndices) + observationOffset;
     
-    if ((errorCode = ext_bio_readSizeType(bio, &node.enumerationIndex)) != 0) goto read_node_cleanup;
     if ((errorCode = ext_bio_readSizeType(bio, &node.numObservations)) != 0) goto read_node_cleanup;
     
     if ((errorCode = ext_bio_readUnsigned64BitInteger(bio, &variablesAvailableForSplit)) != 0) goto read_node_cleanup;
@@ -281,19 +280,20 @@ write_node_cleanup:
     if (nodeFlags > NODE_HAS_CHILDREN) { errorCode = EINVAL; goto read_node_cleanup; }
     
     if (nodeFlags & NODE_HAS_CHILDREN) {
-      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, reinterpret_cast<uint32_t*>(&node.rule.variableIndex))) != 0) goto read_node_cleanup;
-      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.rule.categoryDirections)) != 0) goto read_node_cleanup;
+      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, reinterpret_cast<uint32_t*>(&node.getRule().variableIndex))) != 0) goto read_node_cleanup;
+      if ((errorCode = ext_bio_readUnsigned32BitInteger(bio, &node.getRule().categoryDirections)) != 0) goto read_node_cleanup;
       
       leftChild = dbarts::Node::create(fit, node);
       node.leftChild = leftChild;
       if ((errorCode = readNode(fit, *leftChild, bio, treeIndices)) != 0) goto read_node_cleanup;
       
       rightChild = dbarts::Node::create(fit, node);
-      node.rightChild = rightChild;
+      node.p.rightChild = rightChild;
       if ((errorCode = readNode(fit, *rightChild, bio, treeIndices)) != 0) goto read_node_cleanup;
     } else {
       node.leftChild = NULL;
       
+      if ((errorCode = ext_bio_readSizeType(bio, &node.e.enumerationIndex)) != 0) goto read_node_cleanup;
       if ((errorCode = fit.model.endNodeModel->readScratch(node, bio)) != 0) goto read_node_cleanup;
     }
     
@@ -321,7 +321,7 @@ namespace dbarts {
     if (errorCode != 0) return errorCode;
     
     if (!isBottom()) {
-      updateVariablesAvailable(fit, *this, rule.variableIndex);
+      updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
     updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     
@@ -337,7 +337,7 @@ namespace dbarts {
     if (errorCode != 0) return errorCode;
     
     if (!isBottom()) {
-      updateVariablesAvailable(fit, *this, rule.variableIndex);
+      updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
     updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
     

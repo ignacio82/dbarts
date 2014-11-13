@@ -354,11 +354,19 @@ namespace dbarts {
   BARTFit::BARTFit(Control control, Model model, Data data) :
     control(control), model(model), data(data), scratch(), state(), threadManager(NULL)
   {
-    if (model.endNodeModel->perNodeScratchSize <= (sizeof(Node) - offsetof(Node, rightChild))) {
+    // Node contains union(struct { Node*, Rule }, struct { size_t, void* })
+    // instead of void*, we stick the scratch there (is basically a "void")
+    // however, if size_t + nodeScratch <= size of Node* + Rule, we would end
+    // up allocating too little space
+    
+    // ext_printf("node size: %lu\nscratch size: %lu\noffset of e: %lu\noffset of e.scratch: %lu\nparent size: %lu\n",
+    //            sizeof(Node), model.endNodeModel->perNodeScratchSize, offsetof(Node, e), offsetof(NodeMembers::EndNode, scratch), sizeof(NodeMembers::Parent));
+    if (offsetof(NodeMembers::EndNode, scratch) + model.endNodeModel->perNodeScratchSize <= sizeof(NodeMembers::Parent)) {
       scratch.nodeSize = sizeof(Node);
     } else {
-      scratch.nodeSize = offsetof(Node, rightChild) + model.endNodeModel->perNodeScratchSize;
+      scratch.nodeSize = offsetof(Node, e) + offsetof(NodeMembers::EndNode, scratch) + model.endNodeModel->perNodeScratchSize;;
     }
+    // ext_printf("final node size: %lu\n", scratch.nodeSize);
     
     allocateMemory(*this);
 
@@ -696,7 +704,7 @@ namespace {
     const double** cutPoints = const_cast<const double**>(scratch.cutPoints);
     for (size_t i = 0; i < data.numPredictors; ++i) cutPoints[i] = NULL;
     
-    state.trees = static_cast<Tree*>(::operator new (control.numTrees * sizeof(Tree)));
+    state.trees = ::operator new (control.numTrees * scratch.nodeSize);
     state.treeIndices = new size_t[data.numObservations * control.numTrees];
     
     for (size_t i = 0; i < control.numTrees; ++i) {
@@ -923,8 +931,8 @@ namespace {
       std::memcpy(scratch.treeY, scratch.yRescaled, data.numObservations * sizeof(double));
       ext_addVectorsInPlace((const double*) state.totalFits, data.numObservations, -1.0, scratch.treeY);
       
-      state.trees[i].setNodeAverages(fit, scratch.treeY);
-      state.trees[i].sampleAveragesAndSetFits(fit, currFits, NULL);
+      TREE_AT(state.trees, i, scratch.nodeSize)->setNodeAverages(fit, scratch.treeY);
+      TREE_AT(state.trees, i, scratch.nodeSize)->sampleAveragesAndSetFits(fit, currFits, NULL);
       
       // totalFits += currFits
       ext_addVectorsInPlace((const double*) currFits, data.numObservations, 1.0, state.totalFits);

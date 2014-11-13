@@ -47,6 +47,17 @@ namespace dbarts {
   
   struct Node;
   
+  namespace NodeMembers {
+    struct Parent {
+      Node* rightChild;
+      Rule rule;
+    };
+    struct EndNode {
+      size_t enumerationIndex;
+      void* scratch; // not really a void*, this is just the base address of the scratch
+    };
+  }
+  
   typedef std::vector<Node*> NodeVector;
 
   struct Node {
@@ -55,16 +66,16 @@ namespace dbarts {
     
 #define BART_INVALID_NODE_ENUM static_cast<size_t>(-1)
 
-    size_t enumerationIndex;
     bool* variablesAvailableForSplit;
     
     size_t* observationIndices;
     size_t numObservations;
-    
-    // these two have to be the lasts member; are actually a union
-    // and not used in end-nodes
-    Node* rightChild;
-    Rule rule;
+
+    // this has to be the last member
+    union {
+      NodeMembers::Parent p;
+      NodeMembers::EndNode e;
+    };
     
     // these are static because the size is actually determined by fit, and thus calling a constructor
     // won't allocate the correct amount
@@ -91,8 +102,11 @@ namespace dbarts {
     
     Node* getParent() const;
     Node* getLeftChild() const;
-    Node* getRightChild() const;
     
+    Node* getRightChild() const;
+    Rule& getRule() const;
+    
+    size_t getEnumerationIndex() const;
     void* getScratch() const;
     
     size_t getNumBottomNodes() const;
@@ -156,13 +170,17 @@ namespace dbarts {
   // relied on
   inline bool Node::isTop() const { return parent == NULL; }
   inline bool Node::isBottom() const { return leftChild == NULL; }
-  inline bool Node::childrenAreBottom() const { return leftChild != NULL && leftChild->leftChild == NULL && rightChild->leftChild == NULL; }
+  inline bool Node::childrenAreBottom() const { return leftChild != NULL && leftChild->leftChild == NULL && p.rightChild->leftChild == NULL; }
   
   inline Node* Node::getParent() const { return const_cast<Node*>(parent); }
   inline Node* Node::getLeftChild() const { return const_cast<Node*>(leftChild); }
-  inline Node* Node::getRightChild() const { return const_cast<Node*>(rightChild); }
+  inline Node* Node::getRightChild() const { return const_cast<Node*>(p.rightChild); }
   
-  inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<Node**>(&rightChild)); }
+  inline Rule& Node::getRule() const { return const_cast<Rule&>(p.rule); }
+  
+  // inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<Node**>(&rightChild)); }
+  inline size_t Node::getEnumerationIndex() const { return e.enumerationIndex; } 
+  inline void* Node::getScratch() const { return reinterpret_cast<void*>(const_cast<void**>(&e.scratch)); }
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }

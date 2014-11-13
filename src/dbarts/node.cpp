@@ -84,7 +84,7 @@ namespace {
     }
     if (!node.isBottom()) {
       clearObservationsInNode(fit, *node.leftChild);
-      clearObservationsInNode(fit, *node.rightChild);
+      clearObservationsInNode(fit, *node.p.rightChild);
     }
   }
 }
@@ -94,31 +94,22 @@ namespace dbarts {
   {
     if (!isBottom()) {
       Node::destroy(fit, leftChild);
-      Node::destroy(fit, rightChild);
+      Node::destroy(fit, p.rightChild);
       
       leftChild = NULL;
-      rule.invalidate();
+      p.rule.invalidate();
     } else {
       fit.model.endNodeModel->deleteScratch(*this);
     }
     clearObservationsInNode(fit, *this);
   }
-  
-  /* Node* Node::create(const BARTFit& fit, size_t* observationIndices, size_t numObservations)
-  {
-    Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
-
-    Node::initialize(fit, *result, observationIndices, numObservations);
-
-    return result;
-  } */
 
   Node* Node::create(const BARTFit& fit, const Node& parent)
   {
     Node* result = static_cast<Node*>(::operator new(fit.scratch.nodeSize));
     result->parent = const_cast<Node*>(&parent);
     result->leftChild = NULL;
-    result->enumerationIndex = BART_INVALID_NODE_ENUM;
+    result->e.enumerationIndex = BART_INVALID_NODE_ENUM;
 
     result->observationIndices = NULL;
     result->numObservations = 0;
@@ -135,7 +126,7 @@ namespace dbarts {
   {
     node.parent = NULL;
     node.leftChild = NULL;
-    node.enumerationIndex = BART_INVALID_NODE_ENUM;
+    node.e.enumerationIndex = BART_INVALID_NODE_ENUM;
 
     node.observationIndices = observationIndices;
     node.numObservations = numObservations;
@@ -157,31 +148,12 @@ namespace dbarts {
   {
     if (!node.isBottom()) {
       Node::destroy(fit, node.leftChild);
-      Node::destroy(fit, node.rightChild);
+      Node::destroy(fit, node.p.rightChild);
     } else {
       fit.model.endNodeModel->deleteScratch(node);
     }
     delete [] node.variablesAvailableForSplit; node.variablesAvailableForSplit = NULL;
   }
-  
-/*  void Node::copyFrom(const BARTFit& fit, const Node& other)
-  {
-    parent = other.parent;
-    leftChild = other.leftChild;
-    
-    enumerationIndex = other.enumerationIndex;
-    std::memcpy(variablesAvailableForSplit, other.variablesAvailableForSplit, sizeof(bool) * fit.data.numPredictors);
-    
-    observationIndices = other.observationIndices;
-    numObservations = other.numObservations;
-    
-    if (!isBottom()) {
-      rightChild = other.rightChild;
-      rule.copyFrom(other.rule);
-    } else {
-      fit.model.endNodeModel->copyScratch(fit, *this, other);
-    }
-  } */
   
   void Node::print(const BARTFit& fit) const
   {
@@ -197,13 +169,13 @@ namespace dbarts {
     for (size_t i = 0; i < fit.data.numPredictors; ++i) ext_printf("%u", variablesAvailableForSplit[i]);
     
     if (!isBottom()) {
-      ext_printf(" var: %d ", rule.variableIndex);
+      ext_printf(" var: %d ", p.rule.variableIndex);
       
-      if (fit.data.variableTypes[rule.variableIndex] == CATEGORICAL) {
+      if (fit.data.variableTypes[p.rule.variableIndex] == CATEGORICAL) {
         ext_printf("CATRule: ");
-        for (size_t i = 0; 0 < fit.scratch.numCutsPerVariable[rule.variableIndex]; ++i) ext_printf(" %u", (rule.categoryDirections >> i) & 1);
+        for (size_t i = 0; 0 < fit.scratch.numCutsPerVariable[p.rule.variableIndex]; ++i) ext_printf(" %u", (p.rule.categoryDirections >> i) & 1);
       } else {
-        ext_printf("ORDRule: (%d)=%f", rule.splitIndex, rule.getSplitValue(fit));
+        ext_printf("ORDRule: (%d)=%f", p.rule.splitIndex, p.rule.getSplitValue(fit));
       }
     } else {
       fit.model.endNodeModel->printScratch(fit, *this);
@@ -212,7 +184,7 @@ namespace dbarts {
     
     if (!isBottom()) {
       leftChild->print(fit);
-      rightChild->print(fit);
+      p.rightChild->print(fit);
     }
   }
   
@@ -221,7 +193,7 @@ namespace dbarts {
     if (isBottom()) {
       return 1;
     } else {
-      return leftChild->getNumBottomNodes() + rightChild->getNumBottomNodes();
+      return leftChild->getNumBottomNodes() + p.rightChild->getNumBottomNodes();
     }
   }
   
@@ -229,23 +201,23 @@ namespace dbarts {
   {
     if (isBottom()) return 0;
     
-    return leftChild->getNumNotBottomNodes() + rightChild->getNumNotBottomNodes() + 1;
+    return leftChild->getNumNotBottomNodes() + p.rightChild->getNumNotBottomNodes() + 1;
   }
   
   size_t Node::getNumNoGrandNodes() const
   {
     if (isBottom()) return 0;
     if (childrenAreBottom()) return 1;
-    return (leftChild->getNumNoGrandNodes() + rightChild->getNumNoGrandNodes());
+    return (leftChild->getNumNoGrandNodes() + p.rightChild->getNumNoGrandNodes());
   }
   
   size_t Node::getNumSwappableNodes() const
   {
     if (isBottom() || childrenAreBottom()) return 0;
     if ((leftChild->isBottom()  || leftChild->childrenAreBottom()) &&
-        (rightChild->isBottom() || rightChild->childrenAreBottom())) return 1;
+        (p.rightChild->isBottom() || p.rightChild->childrenAreBottom())) return 1;
     
-    return (leftChild->getNumSwappableNodes() + rightChild->getNumSwappableNodes() + 1);
+    return (leftChild->getNumSwappableNodes() + p.rightChild->getNumSwappableNodes() + 1);
   }
 }
 
@@ -261,14 +233,14 @@ namespace {
     }
     
     fillBottomVector(*node.leftChild, result);
-    fillBottomVector(*node.rightChild, result);
+    fillBottomVector(*node.p.rightChild, result);
   }
   
   void fillAndEnumerateBottomVector(Node& node, NodeVector& result, size_t& index)
   {
     if (node.isBottom()) {
       result.push_back(&node);
-      node.enumerationIndex = index++;
+      node.e.enumerationIndex = index++;
       return;
     }
     
@@ -297,7 +269,7 @@ namespace {
     }
   
     fillNotBottomVector(*node.leftChild, result);
-    fillNotBottomVector(*node.rightChild, result);
+    fillNotBottomVector(*node.p.rightChild, result);
     
     result.push_back(const_cast<Node*>(&node));
   }
@@ -306,13 +278,13 @@ namespace {
   {
     if (node.isBottom() || node.childrenAreBottom()) return;
     if ((node.leftChild->isBottom()  || node.leftChild->childrenAreBottom()) && 
-        (node.rightChild->isBottom() || node.rightChild->childrenAreBottom())) {
+        (node.p.rightChild->isBottom() || node.p.rightChild->childrenAreBottom())) {
       result.push_back(const_cast<Node*>(&node));
       return;
     }
     
     fillSwappableVector(*node.leftChild, result);
-    fillSwappableVector(*node.rightChild, result);
+    fillSwappableVector(*node.p.rightChild, result);
     
     result.push_back(const_cast<Node*>(&node));
   }
@@ -358,7 +330,7 @@ namespace dbarts {
   {
     if (isBottom()) return const_cast<Node*>(this);
     
-    if (rule.goesRight(fit, x)) return rightChild->findBottomNode(fit, x);
+    if (p.rule.goesRight(fit, x)) return p.rightChild->findBottomNode(fit, x);
     
     return leftChild->findBottomNode(fit, x);
   }
@@ -370,9 +342,9 @@ namespace {
   
   struct IndexOrdering {
     const BARTFit& fit;
-    const Rule &rule;
+    const Rule& rule;
     
-    IndexOrdering(const BARTFit& fit, const Rule &rule) : fit(fit), rule(rule) { }
+    IndexOrdering(const BARTFit& fit, const Rule& rule) : fit(fit), rule(rule) { }
     
     bool operator()(size_t i) const { return rule.goesRight(fit, fit.scratch.Xt + i * fit.data.numPredictors); }
   };
@@ -552,7 +524,7 @@ namespace dbarts {
       }
       return n;
     } else {
-      return leftChild->getNumEffectiveObservations(fit) + rightChild->getNumEffectiveObservations(fit);
+      return leftChild->getNumEffectiveObservations(fit) + p.rightChild->getNumEffectiveObservations(fit);
     }
   }
 #endif
@@ -586,12 +558,12 @@ namespace dbarts {
     // update membership
     if (updateType & BART_NODE_UPDATE_COVARIATES_CHANGED) {
       clearObservationsInNode(fit, *leftChild);
-      clearObservationsInNode(fit, *rightChild);
+      clearObservationsInNode(fit, *p.rightChild);
   
       size_t numOnLeft = 0;
   
       if (numObservations > 0) {
-        IndexOrdering ordering(fit, rule);
+        IndexOrdering ordering(fit, p.rule);
   
         numOnLeft = (isTop() ?
                      partitionRange(observationIndices, 0, numObservations, ordering) :
@@ -601,12 +573,12 @@ namespace dbarts {
   
       leftChild->observationIndices = observationIndices;
       leftChild->numObservations = numOnLeft;
-      rightChild->observationIndices = observationIndices + numOnLeft;
-      rightChild->numObservations = numObservations - numOnLeft;
+      p.rightChild->observationIndices = observationIndices + numOnLeft;
+      p.rightChild->numObservations = numObservations - numOnLeft;
     }
     
     leftChild->updateState(fit, y, updateType);
-    rightChild->updateState(fit, y, updateType);
+    p.rightChild->updateState(fit, y, updateType);
   }
   
 /*  void Node::updateMembershipsAndValues(const BARTFit& fit, const double* y) {
@@ -617,12 +589,12 @@ namespace dbarts {
     }
     
     clearObservationsInNode(fit, *leftChild);
-    clearObservationsInNode(fit, *rightChild);
+    clearObservationsInNode(fit, *p.rightChild);
     
     size_t numOnLeft = 0;
     
     if (numObservations > 0) {
-      IndexOrdering ordering(fit, rule);
+      IndexOrdering ordering(fit, p.rule);
     
       numOnLeft = (isTop() ?
                    partitionRange(observationIndices, 0, numObservations, ordering) :
@@ -632,12 +604,12 @@ namespace dbarts {
     
     leftChild->observationIndices = observationIndices;
     leftChild->numObservations = numOnLeft;
-    rightChild->observationIndices = observationIndices + numOnLeft;
-    rightChild->numObservations = numObservations - numOnLeft;
+    p.rightChild->observationIndices = observationIndices + numOnLeft;
+    p.rightChild->numObservations = numObservations - numOnLeft;
     
     
     leftChild->updateMembershipsAndValues(fit, y);
-    rightChild->updateMembershipsAndValues(fit, y);
+    p.rightChild->updateMembershipsAndValues(fit, y);
   }
   
   void Node::updateMemberships(const BARTFit& fit) {
@@ -647,11 +619,11 @@ namespace dbarts {
     }
     
     clearObservationsInNode(fit, *leftChild);
-    clearObservationsInNode(fit, *rightChild);
+    clearObservationsInNode(fit, *p.rightChild);
     
     size_t numOnLeft = 0;
     if (numObservations > 0) {
-      IndexOrdering ordering(fit, rule);
+      IndexOrdering ordering(fit, p.rule);
     
       numOnLeft = (isTop() ?
                    partitionRange(observationIndices, 0, numObservations, ordering) :
@@ -660,11 +632,11 @@ namespace dbarts {
     
     leftChild->observationIndices = observationIndices;
     leftChild->numObservations = numOnLeft;
-    rightChild->observationIndices = observationIndices + numOnLeft;
-    rightChild->numObservations = numObservations - numOnLeft;
+    p.rightChild->observationIndices = observationIndices + numOnLeft;
+    p.rightChild->numObservations = numObservations - numOnLeft;
     
     leftChild->updateMemberships(fit);
-    rightChild->updateMemberships(fit);
+    p.rightChild->updateMemberships(fit);
   }
 	
   void Node::updateWithValues(const BARTFit& fit, const double* r)
@@ -682,7 +654,7 @@ namespace dbarts {
     }
     
     leftChild->updateBottomNodesWithValues(fit, r);
-    rightChild->updateBottomNodesWithValues(fit, r);
+    p.rightChild->updateBottomNodesWithValues(fit, r);
   } */
   
   void Node::drawFromPosterior(const BARTFit& fit, const double* y, double residualVariance) const
@@ -722,13 +694,13 @@ namespace dbarts {
   {
     if (childrenAreBottom()) return 1;
     if (isBottom()) return 0;
-    return (1 + std::max(leftChild->getDepthBelow(), rightChild->getDepthBelow()));
+    return (1 + std::max(leftChild->getDepthBelow(), p.rightChild->getDepthBelow()));
   }
   
   size_t Node::getNumNodesBelow() const
   {
     if (isBottom()) return 0;
-    return 2 + leftChild->getNumNodesBelow() + rightChild->getNumNodesBelow();
+    return 2 + leftChild->getNumNodesBelow() + p.rightChild->getNumNodesBelow();
   }
   
   size_t Node::getNumVariablesAvailableForSplit(size_t numVariables) const {
@@ -738,20 +710,20 @@ namespace dbarts {
   void Node::split(const BARTFit& fit, const Rule& newRule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits) {
     if (newRule.variableIndex < 0) ext_throwError("error in split: rule not set\n");
     
-    rule = newRule;
+    p.rule = newRule;
     
-    leftChild  = Node::create(fit, *this);
-    rightChild = Node::create(fit, *this);
+    leftChild    = Node::create(fit, *this);
+    p.rightChild = Node::create(fit, *this);
     
-    if (exhaustedLeftSplits)  leftChild->variablesAvailableForSplit[rule.variableIndex] = false;
-    if (exhaustedRightSplits) rightChild->variablesAvailableForSplit[rule.variableIndex] = false;
+    if (exhaustedLeftSplits)  leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
+    if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
     updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
     // updateMembershipsAndValues(fit, y);
   }
 
   void Node::orphanChildren(const BARTFit& fit) {
-    fit.model.endNodeModel->updateScratchFromChildren(*this, *leftChild, *rightChild);
+    fit.model.endNodeModel->updateScratchFromChildren(*this, *leftChild, *p.rightChild);
     
     leftChild = NULL;
   }
@@ -760,9 +732,9 @@ namespace dbarts {
   {
     if (isBottom()) return;
     
-    ++variableCounts[rule.variableIndex];
+    ++variableCounts[p.rule.variableIndex];
     
     leftChild->countVariableUses(variableCounts);
-    rightChild->countVariableUses(variableCounts);
+    p.rightChild->countVariableUses(variableCounts);
   }
 }

@@ -54,7 +54,7 @@ namespace dbarts {
   
   double CGMPrior::computeRuleForVariableLogProbability(const BARTFit& fit, const Node& node) const
   {
-    int32_t variableIndex = node.rule.variableIndex;
+    int32_t variableIndex = node.getRule().variableIndex;
     
     double result;
     

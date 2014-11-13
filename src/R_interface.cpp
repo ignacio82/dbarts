@@ -1,6 +1,7 @@
 #include "config.hpp"
 #include <cstring>
 #include <cstddef>
+#include <cstdlib>
 #include <dbarts/cstdint.hpp>
 #include <cmath>
 
@@ -1107,8 +1108,6 @@ namespace {
     if (ISNAN(d_temp)) error("k must be a real number.");
     if (d_temp <= 0.0) error("k must be positive.");
     model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
-//    model.muPrior = new NormalPrior(control, d_temp);
-    
     
     
     priorExpr = GET_ATTR(modelExpr, install("resid.prior"));
@@ -1246,7 +1245,7 @@ namespace {
     const char** treeStrings = const_cast<const char**>(state.createTreeStrings(fit));
     for (size_t i = 0; i < control.numTrees; ++i) {
       SET_STRING_ELT(slotExpr, static_cast<int>(i), CREATE_STRING_VECTOR(treeStrings[i]));
-      delete [] treeStrings[i];
+      std::free(const_cast<char*>(treeStrings[i]));
     }
     delete [] treeStrings;
     
@@ -1335,14 +1334,17 @@ namespace {
     
     ext_rng_destroy(fit->control.rng);
     
-    delete fit->model.treePrior;
-//    delete fit->model.muPrior;
-    delete fit->model.endNodeModel;
-    delete fit->model.sigmaSqPrior;
+    EndNode::Model* endNodeModel        = fit->model.endNodeModel;
+    TreePrior* treePrior                = fit->model.treePrior;
+    ResidualVariancePrior* sigmaSqPrior = fit->model.sigmaSqPrior;
     
     delete [] fit->data.variableTypes;
     delete [] fit->data.maxNumCuts;
     
     delete fit;
+    
+    delete endNodeModel;
+    delete treePrior;
+    delete sigmaSqPrior;
   }
 }

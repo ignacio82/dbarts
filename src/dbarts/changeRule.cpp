@@ -116,16 +116,16 @@ namespace dbarts {
         bool* sel = ext_stackAllocate(numCategories - 1, bool);
         setBinaryRepresentation(numCategories - 1, categoryCombinationNumber, sel);
         
-        nodeToChange.rule.variableIndex = newVariableIndex;
-        nodeToChange.rule.categoryDirections = 0u;
+        nodeToChange.getRule().variableIndex = newVariableIndex;
+        nodeToChange.getRule().categoryDirections = 0u;
         for (size_t j = 0; j < firstGoodCategory; ++j) {
-          if (sel[j] == true) nodeToChange.rule.setCategoryGoesRight(static_cast<uint32_t>(j));
-          else nodeToChange.rule.setCategoryGoesLeft(static_cast<uint32_t>(j));
+          if (sel[j] == true) nodeToChange.getRule().setCategoryGoesRight(static_cast<uint32_t>(j));
+          else nodeToChange.getRule().setCategoryGoesLeft(static_cast<uint32_t>(j));
         }
-        nodeToChange.rule.setCategoryGoesRight(firstGoodCategory);
+        nodeToChange.getRule().setCategoryGoesRight(firstGoodCategory);
         for (size_t j = firstGoodCategory + 1; j < numCategories; ++j) {
-          if (sel[j - 1] == true) nodeToChange.rule.setCategoryGoesRight(static_cast<uint32_t>(j));
-          else nodeToChange.rule.setCategoryGoesLeft(static_cast<uint32_t>(j));
+          if (sel[j - 1] == true) nodeToChange.getRule().setCategoryGoesRight(static_cast<uint32_t>(j));
+          else nodeToChange.getRule().setCategoryGoesLeft(static_cast<uint32_t>(j));
         }
         
         // fix data at nodes below nodeToChange given new rule
@@ -183,8 +183,8 @@ namespace dbarts {
         oldState.store(fit, nodeToChange);
         
         // change rule at nodeToChange to the new one
-        nodeToChange.rule.variableIndex = newVariableIndex;
-        nodeToChange.rule.splitIndex    = newRuleIndex;
+        nodeToChange.getRule().variableIndex = newVariableIndex;
+        nodeToChange.getRule().splitIndex    = newRuleIndex;
         
         // nodeToChange.updateMembershipsAndValues(fit, y);
         nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
@@ -226,9 +226,9 @@ namespace dbarts {
       while (curr != bottomVector[index]) ++index;
       nodesAreReachable[index] = true;
     } else {
-      if (curr->rule.variableIndex == variableIndex) {
+      if (curr->getRule().variableIndex == variableIndex) {
 //        if (curr->rule.categoryDirections[categoryIndex] == BART_CAT_RIGHT) {
-        if (curr->rule.categoryGoesRight(static_cast<uint32_t>(categoryIndex))) {
+        if (curr->getRule().categoryGoesRight(static_cast<uint32_t>(categoryIndex))) {
           findReachableBottomNodesForCategory(curr->getRightChild(), variableIndex, categoryIndex, bottomVector, nodesAreReachable);
         } else {
           findReachableBottomNodesForCategory(curr->getLeftChild(), variableIndex, categoryIndex, bottomVector, nodesAreReachable);
@@ -269,9 +269,9 @@ namespace dbarts {
     if (fit.data.variableTypes[variableIndex] == CATEGORICAL) ext_throwError("error in findOrdinalMinMaxSplitIndices, called on CATEGORICAL var");
     
     if (!node.isBottom()) {
-      if (variableIndex == node.rule.variableIndex) {
-        if (node.rule.splitIndex < *min) *min = node.rule.splitIndex;
-        if (node.rule.splitIndex > *max) *max = node.rule.splitIndex;
+      if (variableIndex == node.getRule().variableIndex) {
+        if (node.getRule().splitIndex < *min) *min = node.getRule().splitIndex;
+        if (node.getRule().splitIndex > *max) *max = node.getRule().splitIndex;
       }
       findOrdinalMinMaxSplitIndices(fit, *node.getLeftChild(), variableIndex, min, max);
       findOrdinalMinMaxSplitIndices(fit, *node.getRightChild(), variableIndex, min, max);
@@ -419,7 +419,7 @@ namespace {
   }
   
   void ::State::store(const BARTFit& fit, const Node& node) {
-    rule = node.rule;
+    rule = node.getRule();
     
     size_t numBottomNodes = node.getNumBottomNodes();
     
@@ -448,7 +448,7 @@ namespace {
   }
   
   void ::State::restore(const BARTFit& fit, Node& node) {
-    node.rule = rule;
+    node.getRule() = rule;
         
     size_t nodeIndex = 0, bottomNodeIndex = 0;
     restoreTree(*this, fit, node, nodeIndex, bottomNodeIndex);
