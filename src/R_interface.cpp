@@ -1289,7 +1289,7 @@ namespace {
     const char** treeStrings = const_cast<const char**>(state.createTreeStrings(fit));
     for (size_t i = 0; i < control.numTrees; ++i) {
       SET_STRING_ELT(slotExpr, static_cast<int>(i), CREATE_STRING_VECTOR(treeStrings[i]));
-      delete [] treeStrings[i];
+      std::free(const_cast<char*>(treeStrings[i]));
     }
     delete [] treeStrings;
   }
