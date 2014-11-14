@@ -125,7 +125,7 @@ namespace dbarts {
       //copyOfOriginalNode.copyFrom(nodeToChange);
       
       // now figure out how the node could have given birth
-      nodeToChange.orphanChildren(fit);
+      nodeToChange.orphanChildren(fit, y);
       
       double newLogLikelihood = computeLogLikelihoodForBranch(fit, nodeToChange, y);
       transitionProbabilityOfBirthStep = computeProbabilityOfBirthStep(fit, tree, true);
@@ -287,7 +287,7 @@ namespace {
   void acceptBirth(const BARTFit& fit, Node& copyOfOriginalNode)
   {
     // no longer an end-node
-    fit.model.endNodeModel->deleteScratch(copyOfOriginalNode);
+    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, copyOfOriginalNode);
   }
   
   void rejectBirth(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
@@ -307,7 +307,7 @@ namespace {
   void rejectDeath(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
   {
     // no longer an end-node
-    fit.model.endNodeModel->deleteScratch(modifiedNode);
+    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, modifiedNode);
     std::memcpy(&modifiedNode, &copyOfOriginalNode, fit.scratch.nodeSize);
     // modifiedNode.copyFrom(fit, copyOfOriginalNode);
   }

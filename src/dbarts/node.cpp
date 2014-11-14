@@ -99,7 +99,7 @@ namespace dbarts {
       leftChild = NULL;
       p.rule.invalidate();
     } else {
-      fit.model.endNodeModel->deleteScratch(*this);
+      fit.model.endNodeModel->destroyScratch(fit, *this);
     }
     clearObservationsInNode(fit, *this);
   }
@@ -117,7 +117,7 @@ namespace dbarts {
     result->variablesAvailableForSplit = new bool[fit.data.numPredictors];
     std::memcpy(result->variablesAvailableForSplit, parent.variablesAvailableForSplit, sizeof(bool) * fit.data.numPredictors);
     
-    fit.model.endNodeModel->createScratch(fit, *result);
+    if (fit.model.endNodeModel->createScratch != NULL) fit.model.endNodeModel->createScratch(fit, *result);
     
     return result;
   }
@@ -134,7 +134,7 @@ namespace dbarts {
     node.variablesAvailableForSplit = new bool[fit.data.numPredictors];
     for (size_t i = 0; i < fit.data.numPredictors; ++i) node.variablesAvailableForSplit[i] = true;
     
-    fit.model.endNodeModel->createScratch(fit, node);
+    if (fit.model.endNodeModel->createScratch != NULL) fit.model.endNodeModel->createScratch(fit, node);
   }
 
   void Node::destroy(const BARTFit& fit, Node* node)
@@ -150,7 +150,7 @@ namespace dbarts {
       Node::destroy(fit, node.leftChild);
       Node::destroy(fit, node.p.rightChild);
     } else {
-      fit.model.endNodeModel->deleteScratch(node);
+      if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, node);
     }
     delete [] node.variablesAvailableForSplit; node.variablesAvailableForSplit = NULL;
   }
@@ -665,16 +665,30 @@ namespace dbarts {
   }
   
   // these could potentially be multithreaded, but the gains are probably minimal
-  void Node::getPredictions(const BARTFit& fit, const double*, const double*, double* y_hat) const
+  void Node::getPredictions(const BARTFit& fit, const double* y, double* y_hat) const
   {
-    double prediction;
-    fit.model.endNodeModel->getPredictions(fit, *this, NULL, NULL, &prediction);
-    if (isTop()) {
-      ext_setVectorToConstant(y_hat, getNumObservations(), prediction);
-      return;
-    }
+    if (fit.model.endNodeModel->info & EndNode::PREDICTION_IS_CONSTANT) {
+      double prediction;
+      
+      fit.model.endNodeModel->getPredictions(fit, *this, y, &prediction);
+      if (isTop()) {
+        ext_setVectorToConstant(y_hat, getNumObservations(), prediction);
+        return;
+      }
     
-    ext_setIndexedVectorToConstant(y_hat, observationIndices, getNumObservations(), prediction);
+      ext_setIndexedVectorToConstant(y_hat, observationIndices, getNumObservations(), prediction);
+    } else {
+      if (isTop()) {
+        fit.model.endNodeModel->getPredictions(fit, *this, y, y_hat);
+      } else {
+        fit.model.endNodeModel->getPredictionsForIndices(fit, *this, y, observationIndices, y_hat);
+      }
+    }
+  }
+  
+  double Node::getPrediction(const BARTFit& fit, const double* y, const double* Xt) const
+  {
+    return fit.model.endNodeModel->getPrediction(fit, *this, y, Xt);
   }
   
   size_t Node::getDepth() const
@@ -719,11 +733,10 @@ namespace dbarts {
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
     updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
-    // updateMembershipsAndValues(fit, y);
   }
 
-  void Node::orphanChildren(const BARTFit& fit) {
-    fit.model.endNodeModel->updateScratchFromChildren(*this, *leftChild, *p.rightChild);
+  void Node::orphanChildren(const BARTFit& fit, const double* y) {
+    fit.model.endNodeModel->updateScratchFromChildren(fit, *this, y, *leftChild, *p.rightChild);
     
     leftChild = NULL;
   }

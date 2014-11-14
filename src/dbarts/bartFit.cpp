@@ -27,7 +27,6 @@
 #include <external/linearAlgebra.h>
 
 #include <dbarts/results.hpp>
-#include "functions.hpp"
 #include "tree.hpp"
 
 using std::size_t;
@@ -52,7 +51,9 @@ namespace {
   
   void initializeLatents(BARTFit& fit);
   void rescaleResponse(BARTFit& fit);
-  // void resampleTreeFits(BARTFit& fit);
+  
+  void calculateResidualsFromOtherTreeFits(const double* y, const double* totalFits, const double* oldTreeFits, size_t numObservations, double* r);
+  void updateTotalFits(const double* oldTreeFits, const double* currTreeFits, size_t numObservations, double* totalFits);
   
   void sampleProbitLatentVariables(BARTFit& fit, const double* fits, double* yRescaled);
   void storeSamples(const BARTFit& fit, Results& results, const double* trainingSample, const double* testSample,
@@ -358,15 +359,11 @@ namespace dbarts {
     // instead of void*, we stick the scratch there (is basically a "void")
     // however, if size_t + nodeScratch <= size of Node* + Rule, we would end
     // up allocating too little space
-    
-    // ext_printf("node size: %lu\nscratch size: %lu\noffset of e: %lu\noffset of e.scratch: %lu\nparent size: %lu\n",
-    //            sizeof(Node), model.endNodeModel->perNodeScratchSize, offsetof(Node, e), offsetof(NodeMembers::EndNode, scratch), sizeof(NodeMembers::Parent));
     if (offsetof(NodeMembers::EndNode, scratch) + model.endNodeModel->perNodeScratchSize <= sizeof(NodeMembers::Parent)) {
       scratch.nodeSize = sizeof(Node);
     } else {
       scratch.nodeSize = offsetof(Node, e) + offsetof(NodeMembers::EndNode, scratch) + model.endNodeModel->perNodeScratchSize;;
     }
-    // ext_printf("final node size: %lu\n", scratch.nodeSize);
     
     allocateMemory(*this);
 
@@ -411,8 +408,8 @@ namespace dbarts {
   
   Results* BARTFit::runSampler(size_t numBurnIn, size_t numSamples)
   {
-    bool stepTaken, isThinningIteration;
-    StepType ignored;
+    bool /* stepTaken, */ isThinningIteration;
+    // StepType ignored;
     
     Results* resultsPointer = new Results(data.numObservations, data.numPredictors,
                                           data.numTestObservations, numSamples == 0 ? 1 : numSamples); // ensure at least one sample for state's sake
@@ -454,53 +451,26 @@ namespace dbarts {
       
       if (!isThinningIteration && data.numTestObservations > 0) ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
       
+      double sigma_sq = state.sigma * state.sigma;
 
       for (size_t i = 0; i < control.numTrees; ++i) {
         Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
         double* oldTreeFits = state.treeFits + i * data.numObservations;
         
-        // treeY = y - (totalFits - oldTreeFits)
-        // is residual from every *other* tree, so what is left for this tree to do
-        std::memcpy(scratch.treeY, scratch.yRescaled, data.numObservations * sizeof(double));
-        ext_addVectorsInPlace(const_cast<const double*>(state.totalFits), data.numObservations, -1.0, scratch.treeY);
-        ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), data.numObservations, 1.0, scratch.treeY);
+        // put into scratch.treeY what we should fit tree against
+        calculateResidualsFromOtherTreeFits(scratch.yRescaled, state.totalFits, oldTreeFits, data.numObservations, scratch.treeY);
         
         // this should cache in the bottom nodes values necessary to a) calculate log likelihood/log integrated
         // likelihood and b) sample from the posterior of the parameters for the model
         // tree_i.updateBottomNodesWithValues(*this, scratch.treeY);
         tree_i.updateState(*this, scratch.treeY, BART_NODE_UPDATE_VALUES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED);
         
-        /* if (k == 1 && i <= 1) {
-          ext_printf("**before:\n");
-          state.trees[i].top.print(*this);
-          if (!state.trees[i].top.isBottom()) {
-            ext_printf("  left child obs :\n    ");
-            for (size_t j = 0; j < state.trees[i].top.getLeftChild()->getNumObservations(); ++j) ext_printf("%2lu, ", state.trees[i].top.getLeftChild()->observationIndices[j]);
-            ext_printf("\n  right child obs:\n    ");
-            for (size_t j = 0; j < state.trees[i].top.getRightChild()->getNumObservations(); ++j) ext_printf("%2lu, ", state.trees[i].top.getRightChild()->observationIndices[j]);
-            ext_printf("\n");
-          }
-        } */
-        // ext_printf("iter %lu, tree %lu: ", k + 1, i + 1);
-        metropolisJumpForTree(*this, tree_i, scratch.treeY, &stepTaken, &ignored);
-        /* if (k == 1 && i <= 3) {
-         ext_printf("**after:\n");
-          state.trees[i].top.print(*this);
-          if (!state.trees[i].top.isBottom()) {
-            ext_printf("  left child obs :\n    ");
-            for (size_t j = 0; j < state.trees[i].top.getLeftChild()->getNumObservations(); ++j) ext_printf("%2lu, ", state.trees[i].top.getLeftChild()->observationIndices[j]);
-            ext_printf("\n  right child obs:\n    ");
-            for (size_t j = 0; j < state.trees[i].top.getRightChild()->getNumObservations(); ++j) ext_printf("%2lu, ", state.trees[i].top.getRightChild()->observationIndices[j]);
-          }
-          ext_printf("\n");
-        } */
-        // state.trees[i].top.print(*this);
+        tree_i.drawFromTreeStructurePosterior(*this, scratch.treeY, sigma_sq);
+        tree_i.drawFromEndNodePosteriors(*this, scratch.treeY, sigma_sq);
+        tree_i.getFits(*this, scratch.treeY, currFits, isThinningIteration ? NULL : currTestFits);
         
-        tree_i.sampleAveragesAndSetFits(*this, scratch.treeY, currFits, isThinningIteration ? NULL : currTestFits);
-        
-        // totalFits += currFits - oldTreeFits
-        ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), data.numObservations, -1.0, state.totalFits);
-        ext_addVectorsInPlace(const_cast<const double*>(currFits), data.numObservations, 1.0, state.totalFits);
+        // remove old tree fits from total and add in current
+        updateTotalFits(oldTreeFits, currFits, data.numObservations, state.totalFits);
         
         if (!isThinningIteration && data.numTestObservations > 0) {
           ext_addVectorsInPlace(const_cast<const double*>(currTestFits), data.numTestObservations, 1.0, state.totalTestFits);
@@ -916,28 +886,21 @@ namespace {
     ext_addScalarToVectorInPlace(   yRescaled, data.numObservations, -0.5);
   }
   
-  /* void resampleTreeFits(BARTFit& fit) {
-    const Data& data(fit.data);
-    const Control& control(fit.control);
-    State& state(fit.state);
-    Scratch& scratch(fit.scratch);
-    
-    // rebuild the total fit and tree fits, manually
-    ext_setVectorToConstant(state.totalFits, data.numObservations, 0.0);
-    for (size_t i = 0; i < control.numTrees; ++i) {
-      double* currFits = state.treeFits + i * data.numObservations;
-      
-      // treeY = y - totalFits
-      std::memcpy(scratch.treeY, scratch.yRescaled, data.numObservations * sizeof(double));
-      ext_addVectorsInPlace((const double*) state.totalFits, data.numObservations, -1.0, scratch.treeY);
-      
-      TREE_AT(state.trees, i, scratch.nodeSize)->setNodeAverages(fit, scratch.treeY);
-      TREE_AT(state.trees, i, scratch.nodeSize)->sampleAveragesAndSetFits(fit, currFits, NULL);
-      
-      // totalFits += currFits
-      ext_addVectorsInPlace((const double*) currFits, data.numObservations, 1.0, state.totalFits);
-    }
-  } */
+  inline void calculateResidualsFromOtherTreeFits(const double* y, const double* totalFits, const double* oldTreeFits,
+                                                  size_t numObservations, double* r)
+  {
+    // treeY = y - (totalFits - oldTreeFits)
+    std::memcpy(r, y, numObservations * sizeof(double));
+    ext_addVectorsInPlace(totalFits, numObservations, -1.0, r);
+    ext_addVectorsInPlace(oldTreeFits, numObservations, 1.0, r);
+  }
+  
+  inline void updateTotalFits(const double* oldTreeFits, const double* currTreeFits, size_t numObservations, double* totalFits)
+  {
+    // totalFits += currFits - oldTreeFits
+    ext_addVectorsInPlace(const_cast<const double*>(oldTreeFits), numObservations, -1.0, totalFits);
+    ext_addVectorsInPlace(const_cast<const double*>(currTreeFits), numObservations, 1.0, totalFits);
+  }
   
   // multithread-this!
   void sampleProbitLatentVariables(BARTFit& fit, const double* fits, double* z) {

@@ -39,7 +39,7 @@ prior.hpp :
 swapRule.hpp : 
 tree.hpp : node.hpp
 
-bartFit.o : bartFit.cpp $(BART_INC)/bartFit.hpp $(BART_INC)/results.hpp binaryIO.hpp functions.hpp tree.hpp
+bartFit.o : bartFit.cpp $(BART_INC)/bartFit.hpp $(BART_INC)/results.hpp binaryIO.hpp tree.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c bartFit.cpp -o bartFit.o
 
 binaryIO.o : binaryIO.cpp binaryIO.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/control.hpp $(BART_INC)/data.hpp $(BART_INC)/endNodeModel.hpp $(BART_INC)/model.hpp tree.hpp
@@ -54,7 +54,7 @@ changeRule.o : changeRule.cpp changeRule.hpp $(BART_INC)/bartFit.hpp $(BART_INC)
 endNodeModel.o : endNodeModel.cpp $(BART_INC)/bartFit.hpp $(BART_INC)/endNodeModel.hpp $(BART_INC)/control.hpp node.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c endNodeModel.cpp -o endNodeModel.o
 
-functions.o : functions.cpp functions.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/model.hpp $(BART_INC)/scratch.hpp $(BART_INC)/types.hpp birthDeathRule.hpp changeRule.hpp node.hpp swapRule.hpp tree.hpp
+functions.o : functions.cpp functions.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/scratch.hpp $(BART_INC)/types.hpp node.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c functions.cpp -o functions.o
 
 likelihood.o : likelihood.cpp likelihood.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/endNodeModel.hpp $(BART_INC)/state.hpp node.hpp
@@ -72,7 +72,9 @@ state.o : state.cpp $(BART_INC)/state.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/co
 swapRule.o : swapRule.cpp swapRule.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/model.hpp $(BART_INC)/scratch.hpp $(BART_INC)/types.hpp functions.hpp likelihood.hpp node.hpp tree.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c swapRule.cpp -o swapRule.o
 
-tree.o : tree.cpp tree.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/data.hpp $(BART_INC)/endNodeModel.hpp $(BART_INC)/scratch.hpp $(BART_INC)/state.hpp functions.hpp
+tree.o : tree.cpp tree.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/data.hpp $(BART_INC)/model.hpp \
+  $(BART_INC)/endNodeModel.hpp $(BART_INC)/scratch.hpp $(BART_INC)/state.hpp birthDeathRule.hpp \
+  changeRule.hpp functions.hpp swapRule.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c tree.cpp -o tree.o
 
 treePrior.o : treePrior.cpp $(BART_INC)/model.hpp $(BART_INC)/data.hpp $(BART_INC)/scratch.hpp $(BART_INC)/types.hpp functions.hpp node.hpp tree.hpp

@@ -132,11 +132,13 @@ namespace dbarts {
     double getNumEffectiveObservations(const BARTFit& fit) const;
 #endif
     
+    template<class T> T* subsetVector(const T* v) const;
     
     void clear(const BARTFit& fit);
     
     void drawFromPosterior(const BARTFit& fit, const double* y, double residualVariance) const;
-    void getPredictions(const BARTFit& fit, const double* y, const double* x, double* y_hat) const;
+    void getPredictions(const BARTFit& fit, const double* y, double* y_hat) const;     // uses training data
+    double getPrediction(const BARTFit& fit, const double* y, const double* Xt) const; // uses input Xt
         
     size_t getDepth() const;
     size_t getDepthBelow() const;
@@ -144,9 +146,9 @@ namespace dbarts {
     size_t getNumNodesBelow() const;
     size_t getNumVariablesAvailableForSplit(size_t numVariables) const;
     
-    // split and orphanChildren *DO NOT* handle node scratch, so that they are more readily reversable
+    // these do not delete node scratches so that they can be reverted
     void split(const BARTFit& fit, const Rule& rule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits);
-    void orphanChildren(const BARTFit& fit);
+    void orphanChildren(const BARTFit& fit, const double* y);
     
     void countVariableUses(uint32_t* variableCounts) const;
   };
@@ -184,6 +186,13 @@ namespace dbarts {
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }
+  
+  template<class T> T* Node::subsetVector(const T* v) const {
+    T* result = new T[numObservations];
+    for (size_t i = 0; i < numObservations; ++i) result[i] = v[observationIndices[i]];
+    
+    return result;
+  }
 
   inline bool Rule::categoryGoesRight(uint32_t categoryId) const { return ((1u << categoryId) & categoryDirections) != 0; }
   inline void Rule::setCategoryGoesRight(uint32_t categoryId) { categoryDirections |= (1u << categoryId); }

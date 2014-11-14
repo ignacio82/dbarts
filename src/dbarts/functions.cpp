@@ -7,13 +7,9 @@
 #include <external/random.h>
 
 #include <dbarts/bartFit.hpp>
-#include <dbarts/model.hpp>
 #include <dbarts/scratch.hpp>
 #include <dbarts/types.hpp>
-#include "birthDeathRule.hpp"
-#include "changeRule.hpp"
 #include "node.hpp"
-#include "swapRule.hpp"
 
 using std::int32_t;
 using std::uint32_t;
@@ -94,37 +90,6 @@ namespace dbarts {
     }
     
     delete [] catGoesRight;
-  }
-  
-  double metropolisJumpForTree(const BARTFit& fit, Tree& tree, const double* y,
-                               bool* stepTaken, StepType* stepType)
-  { 
-    double alpha;
-    bool birthedTree;
-    
-    
-    
-    double u = ext_rng_simulateContinuousUniform(fit.control.rng);
-    // ext_printf("type: %s; ", u < fit.model.birthOrDeathProbability ? "birth/death" : (u < fit.model.birthOrDeathProbability + fit.model.swapProbability ? "swap" : "change"));
-    if (u < fit.model.birthOrDeathProbability) {
-      alpha = birthOrDeathNode(fit, tree, y, stepTaken, &birthedTree);
-      if (birthedTree == true) {
-        *stepType = BIRTH;
-      } else {
-        *stepType = DEATH;
-      }
-    } else if (u < fit.model.birthOrDeathProbability + fit.model.swapProbability) { 
-      alpha = swapRule(fit, tree, y, stepTaken);
-      *stepType = SWAP;
-    } else {
-      alpha = changeRule(fit, tree, y, stepTaken);
-      *stepType = CHANGE;
-    }
-    // const char * const jumpNames[] = { "birth", "death", "swap", "change" };
-    // ext_printf("jump: %s, succ: %s, u: %f\n", jumpNames[*stepType], *stepTaken ? "true" : "false", u);
-    
-
-    return alpha;
   }
   
   void setBinaryRepresentation(uint32_t length, uint32_t ind, bool* d)

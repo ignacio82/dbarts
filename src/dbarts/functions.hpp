@@ -16,8 +16,6 @@ namespace dbarts {
   struct Tree;
   
   void updateVariablesAvailable(const BARTFit& fit, Node& node, int32_t variableIndex);
-  double metropolisJumpForTree(const BARTFit& fit, Tree& tree, const double* y,
-                               bool* stepTaken, StepType* stepType);
   
   // for int "ind", flips the bits in d such that d is the powers of 2 to get back to ind
   void setBinaryRepresentation(uint32_t length, uint32_t ind, bool* d);

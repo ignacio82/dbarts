@@ -18,15 +18,20 @@ using std::snprintf;
 
 #include <external/alloca.h>
 #include <external/binaryIO.h>
+#include <external/random.h>
 #include <external/stats.h>
 #include <external/stringWriter.h>
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/data.hpp>
 #include <dbarts/endNodeModel.hpp>
+#include <dbarts/model.hpp>
 #include <dbarts/scratch.hpp>
 #include <dbarts/state.hpp>
+#include "birthDeathRule.hpp"
+#include "changeRule.hpp"
 #include "functions.hpp"
+#include "swapRule.hpp"
 
 using std::uint32_t;
 
@@ -52,10 +57,85 @@ namespace {
 }
 
 namespace dbarts {
-  // void Tree::drawFromEndNodePosteriorsAndSetFits(const BARTFit& fit, const double* y, double residualVariance)
-  // void Tree::
+  void Tree::drawFromTreeStructurePosterior(const BARTFit& fit, const double* y, double)
+  {
+    bool birthedTree, stepTaken;
+    
+    double u = ext_rng_simulateContinuousUniform(fit.control.rng);
+    
+    if (u < fit.model.birthOrDeathProbability) {
+      /* alpha = */ birthOrDeathNode(fit, *this, y, &stepTaken, &birthedTree);
+      /* if (birthedTree == true) {
+        *stepType = BIRTH;
+      } else {
+        *stepType = DEATH;
+      } */
+    } else if (u < fit.model.birthOrDeathProbability + fit.model.swapProbability) { 
+      /* alpha = */ swapRule(fit, *this, y, &stepTaken);
+      // *stepType = SWAP;
+    } else {
+      /* alpha = */ changeRule(fit, *this, y, &stepTaken);
+      // *stepType = CHANGE;
+    }
+    
+    // return alpha;
+  }
   
-  void Tree::sampleAveragesAndSetFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
+  void Tree::drawFromEndNodePosteriors(const BARTFit& fit, const double* y, double residualVariance)
+  {
+    NodeVector bottomNodes(getBottomVector());
+    size_t numBottomNodes = bottomNodes.size();
+    
+    for (size_t i = 0; i < numBottomNodes; ++i) {
+      const Node& bottomNode(*bottomNodes[i]);
+      
+      bottomNode.drawFromPosterior(fit, y, residualVariance);
+    }
+  }
+  
+  void Tree::getFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
+  {
+    NodeVector bottomNodes(getAndEnumerateBottomVector());
+    size_t numBottomNodes = bottomNodes.size();
+    
+    double* nodePosteriorPredictions = NULL;
+  
+    if (testFits != NULL && fit.model.endNodeModel->info & EndNode::PREDICTION_IS_CONSTANT)
+      nodePosteriorPredictions = ext_stackAllocate(numBottomNodes, double);
+    
+    for (size_t i = 0; i < numBottomNodes; ++i) {
+      const Node& bottomNode(*bottomNodes[i]);
+    
+      bottomNode.getPredictions(fit, y, trainingFits);
+      
+      if (nodePosteriorPredictions != NULL)
+        nodePosteriorPredictions[i] = trainingFits[bottomNode.isTop() ? 0 : bottomNode.observationIndices[0]];
+    }
+    
+    if (testFits != NULL) {
+      if (nodePosteriorPredictions != NULL) {
+        size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
+      
+        for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = nodePosteriorPredictions[observationNodeMap[i]];
+        
+        delete [] observationNodeMap;
+        
+        ext_stackFree(nodePosteriorPredictions);
+      } else {
+        const double* Xt_test = fit.scratch.Xt_test;
+        
+        for (size_t i = 0; i < fit.data.numTestObservations; ++i) {
+          const Node* bottomNode = findBottomNode(fit, Xt_test);
+          
+          testFits[i] = bottomNode->getPrediction(fit, y, Xt_test);
+          
+          Xt_test += fit.data.numPredictors;
+        }
+      }
+    }
+  }
+  
+/*   void Tree::sampleAveragesAndSetFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
   {
     NodeVector bottomNodes(getAndEnumerateBottomVector());
     size_t numBottomNodes = bottomNodes.size();
@@ -68,7 +148,7 @@ namespace dbarts {
       const Node& bottomNode(*bottomNodes[i]);
       
       bottomNode.drawFromPosterior(fit, y, fit.state.sigma * fit.state.sigma);
-      bottomNode.getPredictions(fit, NULL, NULL, trainingFits);
+      bottomNode.getPredictions(fit, y, trainingFits);
       
       if (testFits != NULL) nodePosteriorPredictions[i] = trainingFits[bottomNode.isTop() ? 0 : bottomNode.observationIndices[0]];
     }
@@ -80,7 +160,7 @@ namespace dbarts {
       
       ext_stackFree(nodePosteriorPredictions);
     }
-  }
+  } */
   
   double* Tree::recoverAveragesFromFits(const BARTFit&, const double* treeFits)
   {
@@ -112,7 +192,7 @@ namespace dbarts {
         
         // bottomNode.setPosterior
         *static_cast<double*>(bottomNode.getScratch()) = posteriorPredictions[i];
-        bottomNode.getPredictions(fit, NULL, NULL, trainingFits);
+        bottomNode.getPredictions(fit, NULL, trainingFits);
       }
     }
     
