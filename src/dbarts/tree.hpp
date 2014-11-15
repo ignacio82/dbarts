@@ -21,13 +21,23 @@ namespace dbarts {
   struct Tree : Node {
     void drawFromTreeStructurePosterior(const BARTFit& fit, const double* y, double residualVariance);
     void drawFromEndNodePosteriors(const BARTFit& fit, const double* y, double residualVariance);
-    void getFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits);
+    void getFits(const BARTFit& fit, double* trainingFits, double* testFits);
     
-    double* recoverAveragesFromFits(const BARTFit& fit, const double* treeFits); // allocates response; are ordered as bottom nodes are
-    void setCurrentFitsFromAverages(const BARTFit& fit, const double* posteriorPredictions, double* trainingFits, double* testFits);
+    // double* recoverAveragesFromFits(const BARTFit& fit, const double* treeFits); // allocates response; are ordered as bottom nodes are
+    // void setCurrentFitsFromAverages(const BARTFit& fit, const double* posteriorPredictions, double* trainingFits, double* testFits);
     
     Node* getTop() const;
     bool hasSingleNode() const;
+    
+    // prepare end-nodes by precomputing whatever is necessary; subsequent steps are:
+    //  drawFromTreeStructurePosterior (which may compute log-integrated likelihood)
+    //  drawFromEndNodePosteriors
+    //  getFits
+    void prepareForMetropolisStep(const BARTFit& fit, const double* y, double residualVariance);
+    // implies fit is embeded in a larger model, and covariates have been sampled
+    // subsequently, getFits will be called; can also be called after re-creating
+    // from serialized object
+    void updateWithNewCovariates(const BARTFit& fit, double residualVariance);
     
     
     void updateBottomNodesWithValues(const BARTFit& fit, const double* y);
@@ -61,6 +71,7 @@ namespace dbarts {
   
   inline Node* Tree::getTop() const { return const_cast<Node*>(static_cast<const Node*>(this)); }
   inline bool Tree::hasSingleNode() const { return isBottom(); }
+  inline void Tree::updateWithNewCovariates(const BARTFit& fit, double residualVariance) { updateMemberships(fit, residualVariance); }
 }
 
 #endif

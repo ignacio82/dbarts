@@ -18,6 +18,7 @@ using std::snprintf;
 
 #include <external/alloca.h>
 #include <external/binaryIO.h>
+#include <external/linearAlgebra.h>
 #include <external/random.h>
 #include <external/stats.h>
 #include <external/stringWriter.h>
@@ -64,21 +65,12 @@ namespace dbarts {
     double u = ext_rng_simulateContinuousUniform(fit.control.rng);
     
     if (u < fit.model.birthOrDeathProbability) {
-      /* alpha = */ birthOrDeathNode(fit, *this, y, &stepTaken, &birthedTree);
-      /* if (birthedTree == true) {
-        *stepType = BIRTH;
-      } else {
-        *stepType = DEATH;
-      } */
+      birthOrDeathNode(fit, *this, y, &stepTaken, &birthedTree);
     } else if (u < fit.model.birthOrDeathProbability + fit.model.swapProbability) { 
-      /* alpha = */ swapRule(fit, *this, y, &stepTaken);
-      // *stepType = SWAP;
+      swapRule(fit, *this, y, &stepTaken);
     } else {
-      /* alpha = */ changeRule(fit, *this, y, &stepTaken);
-      // *stepType = CHANGE;
+      changeRule(fit, *this, y, &stepTaken);
     }
-    
-    // return alpha;
   }
   
   void Tree::drawFromEndNodePosteriors(const BARTFit& fit, const double* y, double residualVariance)
@@ -93,41 +85,53 @@ namespace dbarts {
     }
   }
   
-  void Tree::getFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
+  void Tree::getFits(const BARTFit& fit, double* trainingFits, double* testFits)
   {
     NodeVector bottomNodes(getAndEnumerateBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
-    double* nodePosteriorPredictions = NULL;
-  
-    if (testFits != NULL && fit.model.endNodeModel->info & EndNode::PREDICTION_IS_CONSTANT)
-      nodePosteriorPredictions = ext_stackAllocate(numBottomNodes, double);
-    
-    for (size_t i = 0; i < numBottomNodes; ++i) {
-      const Node& bottomNode(*bottomNodes[i]);
-    
-      bottomNode.getPredictions(fit, y, trainingFits);
+    // special case in which we can cache the predictions because there is only one per node
+    if (testFits != NULL && fit.model.endNodeModel->info & EndNode::PREDICTION_IS_CONSTANT) {
+      double* nodePosteriorPredictions = ext_stackAllocate(numBottomNodes, double);
       
-      if (nodePosteriorPredictions != NULL)
-        nodePosteriorPredictions[i] = trainingFits[bottomNode.isTop() ? 0 : bottomNode.observationIndices[0]];
-    }
-    
-    if (testFits != NULL) {
-      if (nodePosteriorPredictions != NULL) {
-        size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
+      for (size_t i = 0; i < numBottomNodes; ++i) {
+        const Node& bottomNode(*bottomNodes[i]);
+        
+        nodePosteriorPredictions[i] = bottomNode.getPrediction(fit, NULL);
+        
+        if (trainingFits != NULL) {
+          if (bottomNode.isTop())
+            ext_setVectorToConstant(trainingFits, fit.data.numObservations, nodePosteriorPredictions[i]);
+          else
+            ext_setIndexedVectorToConstant(trainingFits, bottomNode.getObservationIndices(), bottomNode.getNumObservations(), nodePosteriorPredictions[i]);
+        }
+      }
       
-        for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = nodePosteriorPredictions[observationNodeMap[i]];
+      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
+    
+      for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = nodePosteriorPredictions[observationNodeMap[i]];
+      
+      delete [] observationNodeMap;
+      
+      ext_stackFree(nodePosteriorPredictions);
+      
+    } else {
+      // general case, nothing special
+      if (trainingFits != NULL) {
+        for (size_t i = 0; i < numBottomNodes; ++i) {
+          const Node& bottomNode(*bottomNodes[i]);
         
-        delete [] observationNodeMap;
-        
-        ext_stackFree(nodePosteriorPredictions);
-      } else {
+          bottomNode.getPredictions(fit, trainingFits);
+        }
+      }
+      
+      if (testFits != NULL) {
         const double* Xt_test = fit.scratch.Xt_test;
         
         for (size_t i = 0; i < fit.data.numTestObservations; ++i) {
           const Node* bottomNode = findBottomNode(fit, Xt_test);
           
-          testFits[i] = bottomNode->getPrediction(fit, y, Xt_test);
+          testFits[i] = bottomNode->getPrediction(fit, Xt_test);
           
           Xt_test += fit.data.numPredictors;
         }
@@ -135,34 +139,18 @@ namespace dbarts {
     }
   }
   
-/*   void Tree::sampleAveragesAndSetFits(const BARTFit& fit, const double* y, double* trainingFits, double* testFits)
+  void Tree::prepareForMetropolisStep(const BARTFit& fit, const double* y, double residualVariance)
   {
-    NodeVector bottomNodes(getAndEnumerateBottomVector());
+    NodeVector bottomNodes(getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
     
-    double* nodePosteriorPredictions = NULL;
-    
-    if (testFits != NULL) nodePosteriorPredictions = ext_stackAllocate(numBottomNodes, double);
-    
     for (size_t i = 0; i < numBottomNodes; ++i) {
-      const Node& bottomNode(*bottomNodes[i]);
-      
-      bottomNode.drawFromPosterior(fit, y, fit.state.sigma * fit.state.sigma);
-      bottomNode.getPredictions(fit, y, trainingFits);
-      
-      if (testFits != NULL) nodePosteriorPredictions[i] = trainingFits[bottomNode.isTop() ? 0 : bottomNode.observationIndices[0]];
+      Node& bottomNode(*bottomNodes[i]);
+      fit.model.endNodeModel->prepareScratchForLikelihoodAndPosteriorCalculations(fit, bottomNode, y, residualVariance);
     }
-    
-    if (testFits != NULL) {
-      size_t* observationNodeMap = createObservationToNodeIndexMap(fit, *this, fit.scratch.Xt_test, fit.data.numTestObservations);
-      for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = nodePosteriorPredictions[observationNodeMap[i]];
-      delete [] observationNodeMap;
-      
-      ext_stackFree(nodePosteriorPredictions);
-    }
-  } */
+  }
   
-  double* Tree::recoverAveragesFromFits(const BARTFit&, const double* treeFits)
+  /* double* Tree::recoverAveragesFromFits(const BARTFit&, const double* treeFits)
   {
     NodeVector bottomNodes(getBottomVector());
     size_t numBottomNodes = bottomNodes.size();
@@ -201,7 +189,7 @@ namespace dbarts {
       for (size_t i = 0; i < fit.data.numTestObservations; ++i) testFits[i] = posteriorPredictions[observationNodeMap[i]];
       delete [] observationNodeMap;
     }
-  }
+  } */
   
   bool Tree::isValid() const {
     const NodeVector bottomNodes(getBottomVector());
@@ -403,7 +391,7 @@ namespace dbarts {
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
-    updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
+    updateWithNewCovariates(fit, fit.state.sigma * fit.state.sigma);
     
     return 0;
   }
@@ -419,7 +407,7 @@ namespace dbarts {
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
-    updateState(fit, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
+    updateWithNewCovariates(fit, fit.state.sigma * fit.state.sigma);
     
     return 0;
   }

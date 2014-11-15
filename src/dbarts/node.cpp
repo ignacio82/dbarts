@@ -529,7 +529,67 @@ namespace dbarts {
   }
 #endif
   
-  void Node::updateState(const BARTFit& fit, const double* y, uint32_t updateType)
+  void Node::updateMemberships(const BARTFit& fit, double residualVariance)
+  {
+    if (isBottom()) {
+      fit.model.endNodeModel->updateScratchWithMemberships(fit, *this, residualVariance);
+      return;
+    }
+    
+    clearObservationsInNode(fit, *leftChild);
+    clearObservationsInNode(fit, *p.rightChild);
+
+    size_t numOnLeft = 0;
+
+    if (numObservations > 0) {
+      IndexOrdering ordering(fit, p.rule);
+
+      numOnLeft = (isTop() ?
+                   partitionRange(observationIndices, 0, numObservations, ordering) :
+                   partitionIndices(observationIndices, numObservations, ordering));
+    }
+
+
+    leftChild->observationIndices = observationIndices;
+    leftChild->numObservations = numOnLeft;
+    p.rightChild->observationIndices = observationIndices + numOnLeft;
+    p.rightChild->numObservations = numObservations - numOnLeft;
+  
+    leftChild->updateMemberships(fit, residualVariance);
+    p.rightChild->updateMemberships(fit, residualVariance);
+  }
+  
+  void Node::updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const double* y, double residualVariance)
+  {
+    if (isBottom()) {
+      fit.model.endNodeModel->updateMembershipsAndPrepareScratch(fit, *this, y, residualVariance);
+      return;
+    }
+    
+    clearObservationsInNode(fit, *leftChild);
+    clearObservationsInNode(fit, *p.rightChild);
+
+    size_t numOnLeft = 0;
+
+    if (numObservations > 0) {
+      IndexOrdering ordering(fit, p.rule);
+
+      numOnLeft = (isTop() ?
+                   partitionRange(observationIndices, 0, numObservations, ordering) :
+                   partitionIndices(observationIndices, numObservations, ordering));
+    }
+
+
+    leftChild->observationIndices = observationIndices;
+    leftChild->numObservations = numOnLeft;
+    p.rightChild->observationIndices = observationIndices + numOnLeft;
+    p.rightChild->numObservations = numObservations - numOnLeft;
+  
+    leftChild->updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, residualVariance);
+    p.rightChild->updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, residualVariance);
+  }
+  
+  /* void Node::updateState(const BARTFit& fit, const double* y, uint32_t updateType)
   {
     if (isBottom()) {
       switch(updateType) {
@@ -579,7 +639,7 @@ namespace dbarts {
     
     leftChild->updateState(fit, y, updateType);
     p.rightChild->updateState(fit, y, updateType);
-  }
+  } */
   
 /*  void Node::updateMembershipsAndValues(const BARTFit& fit, const double* y) {
 
@@ -665,12 +725,12 @@ namespace dbarts {
   }
   
   // these could potentially be multithreaded, but the gains are probably minimal
-  void Node::getPredictions(const BARTFit& fit, const double* y, double* y_hat) const
+  /* void Node::getPredictions(const BARTFit& fit, double* y_hat) const
   {
     if (fit.model.endNodeModel->info & EndNode::PREDICTION_IS_CONSTANT) {
       double prediction;
       
-      fit.model.endNodeModel->getPredictions(fit, *this, y, &prediction);
+      fit.model.endNodeModel->getPredictions(fit, *this, &prediction);
       if (isTop()) {
         ext_setVectorToConstant(y_hat, getNumObservations(), prediction);
         return;
@@ -679,17 +739,17 @@ namespace dbarts {
       ext_setIndexedVectorToConstant(y_hat, observationIndices, getNumObservations(), prediction);
     } else {
       if (isTop()) {
-        fit.model.endNodeModel->getPredictions(fit, *this, y, y_hat);
+        fit.model.endNodeModel->getPredictions(fit, *this, y_hat);
       } else {
-        fit.model.endNodeModel->getPredictionsForIndices(fit, *this, y, observationIndices, y_hat);
+        fit.model.endNodeModel->getPredictionsForIndices(fit, *this, observationIndices, y_hat);
       }
     }
   }
   
-  double Node::getPrediction(const BARTFit& fit, const double* y, const double* Xt) const
+  double Node::getPrediction(const BARTFit& fit, const double* Xt) const
   {
-    return fit.model.endNodeModel->getPrediction(fit, *this, y, Xt);
-  }
+    return fit.model.endNodeModel->getPrediction(fit, *this, Xt);
+  } */
   
   size_t Node::getDepth() const
   {
@@ -721,7 +781,7 @@ namespace dbarts {
     return countTrueValues(variablesAvailableForSplit, numVariables);
   }
 
-  void Node::split(const BARTFit& fit, const Rule& newRule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits) {
+  void Node::split(const BARTFit& fit, const Rule& newRule, const double* y, double residualVariance, bool exhaustedLeftSplits, bool exhaustedRightSplits) {
     if (newRule.variableIndex < 0) ext_throwError("error in split: rule not set\n");
     
     p.rule = newRule;
@@ -732,11 +792,13 @@ namespace dbarts {
     if (exhaustedLeftSplits)  leftChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     if (exhaustedRightSplits) p.rightChild->variablesAvailableForSplit[p.rule.variableIndex] = false;
     
-    updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+    
+    updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, residualVariance);
+    // updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
   }
 
-  void Node::orphanChildren(const BARTFit& fit, const double* y) {
-    fit.model.endNodeModel->updateScratchFromChildren(fit, *this, y, *leftChild, *p.rightChild);
+  void Node::orphanChildren(const BARTFit& fit, const double* y, double residualVariance) {
+    fit.model.endNodeModel->prepareScratchFromChildren(fit, *this, y, residualVariance, *leftChild, *p.rightChild);
     
     leftChild = NULL;
   }

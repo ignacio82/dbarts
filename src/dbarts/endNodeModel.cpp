@@ -32,16 +32,16 @@ namespace {
   void meanNormalDrawFromPrior(const BARTFit& fit, const Node& node);
   void meanNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
   
-  double meanNormalGetPrediction(const BARTFit& fit, const Node& node, const double* y, const double* Xt);
-  void meanNormalGetPredictions(const BARTFit& fit, const Node& node, const double* y, double* y_hat);
-  void meanNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double* y, const size_t* indices, double* y_hat);
+  double meanNormalGetPrediction(const BARTFit& fit, const Node& node, const double* Xt);
+  void meanNormalGetPredictions(const BARTFit& fit, const Node& node, double* y_hat);
+  // void meanNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double* y, const size_t* indices, double* y_hat);
   
   void meanNormalCopyScratch(const BARTFit& fit, Node& target, const Node& source);
   void meanNormalPrintScratch(const BARTFit& fit, const Node& node);
   
-  void meanNormalUpdateScratchWithValues(const BARTFit& fit, const Node& node, const double* y);
-  void meanNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node);
-  void meanNormalUpdateScratchFromChildren(const BARTFit& fit, Node& parent, const double* y, const Node& leftChild, const Node& rightChild);
+  void meanNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node, double residualVariance);
+  void meanNormalPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+  void meanNormalPrepareScratchFromChildren(const BARTFit& fit, Node& parent, const double* y, double residualVariance, const Node& leftChild, const Node& rightChild);
   
   int meanNormalWriteScratch(const Node& node, ext_binaryIO* bio);
   int meanNormalReadScratch(Node& node, ext_binaryIO* bio);
@@ -66,17 +66,17 @@ namespace dbarts {
       
       model.getPrediction = &meanNormalGetPrediction;
       model.getPredictions = &meanNormalGetPredictions;
-      model.getPredictionsForIndices = &meanNormalGetPredictionsForIndices;
+      // model.getPredictionsForIndices = &meanNormalGetPredictionsForIndices;
       
       model.createScratch = NULL;
       model.destroyScratch = NULL;
       model.copyScratch = &meanNormalCopyScratch;
       model.printScratch = &meanNormalPrintScratch;
       
-      model.updateScratchWithValues = &meanNormalUpdateScratchWithValues;
       model.updateScratchWithMemberships = &meanNormalUpdateScratchWithMemberships;
-      model.updateScratchWithMembershipsAndValues = &meanNormalUpdateScratchWithValues;
-      model.updateScratchFromChildren = &meanNormalUpdateScratchFromChildren;
+      model.prepareScratchForLikelihoodAndPosteriorCalculations = &meanNormalPrepareScratchForLikelihoodAndPosteriorCalculations;
+      model.updateMembershipsAndPrepareScratch = &meanNormalPrepareScratchForLikelihoodAndPosteriorCalculations;
+      model.prepareScratchFromChildren = &meanNormalPrepareScratchFromChildren;
       
       model.writeScratch = &meanNormalWriteScratch;
       model.readScratch = &meanNormalReadScratch;
@@ -195,23 +195,27 @@ namespace {
     scratch.mu = posteriorMean + posteriorSd * ext_rng_simulateStandardNormal(fit.control.rng);
   }
   
-  double meanNormalGetPrediction(const BARTFit&, const Node& node, const double*, const double*)
+  double meanNormalGetPrediction(const BARTFit&, const Node& node, const double*)
   {
     DEFINE_SCRATCH(node);
+    
     return scratch.mu;
   }
   
-  void meanNormalGetPredictions(const BARTFit&, const Node& node, const double*, double* y_hat)
+  void meanNormalGetPredictions(const BARTFit&, const Node& node, double* y_hat)
   {
     DEFINE_SCRATCH(node);
-    y_hat[0] = scratch.mu;
+    if (node.isTop()) 
+      ext_setVectorToConstant(y_hat, node.getNumObservations(), scratch.mu);
+    else
+      ext_setIndexedVectorToConstant(y_hat, node.getObservationIndices(), node.getNumObservations(), scratch.mu);
   }
   
-  void meanNormalGetPredictionsForIndices(const BARTFit&, const Node& node, const double*, const size_t*, double* y_hat)
+  /* void meanNormalGetPredictionsForIndices(const BARTFit&, const Node& node, const double*, const size_t*, double* y_hat)
   {
     DEFINE_SCRATCH(node);
     y_hat[0] = scratch.mu;
-  }
+  } */
   
   void meanNormalCopyScratch(const BARTFit&, Node& targetNode, const Node& sourceNode)
   {
@@ -228,7 +232,7 @@ namespace {
     ext_printf(" ave: %f", scratch.mu);
   }
   
-  void meanNormalUpdateScratchWithValues(const BARTFit& fit, const Node& node, const double* y)
+  void meanNormalPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const Node& node, const double* y, double)
   {
     DEFINE_SCRATCH(node);
     
@@ -258,11 +262,11 @@ namespace {
     }
   }
   
-  void meanNormalUpdateScratchWithMemberships(const BARTFit&, const Node&) {
+  void meanNormalUpdateScratchWithMemberships(const BARTFit&, const Node&, double) {
 
   }
   
-  void meanNormalUpdateScratchFromChildren(const BARTFit&, Node& parentNode, const double*, const Node& leftChildNode, const Node& rightChildNode)
+  void meanNormalPrepareScratchFromChildren(const BARTFit&, Node& parentNode, const double*, double, const Node& leftChildNode, const Node& rightChildNode)
   {
     MeanNormalNodeScratch& parent(*static_cast<MeanNormalNodeScratch*>(parentNode.getScratch()));
     const MeanNormalNodeScratch& leftChild(*static_cast<const MeanNormalNodeScratch*>(leftChildNode.getScratch()));
@@ -327,19 +331,19 @@ namespace {
   void linearRegressionNormalDrawFromPosterior(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
 
   
-  double linearRegressionNormalGetPrediction(const BARTFit& fit, const Node& node, const double*, const double* Xt);
-  void linearRegressionNormalGetPredictions(const BARTFit& fit, const Node& node, const double*, double* y_hat);
-  void linearRegressionNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double*, const std::size_t*, double* y_hat);
+  double linearRegressionNormalGetPrediction(const BARTFit& fit, const Node& node, const double* Xt);
+  void linearRegressionNormalGetPredictions(const BARTFit& fit, const Node& node, double* y_hat);
+  // void linearRegressionNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double*, const std::size_t*, double* y_hat);
     
   void linearRegressionNormalCreateScratch(const BARTFit& fit, Node& node);
   void linearRegressionNormalDestroyScratch(const BARTFit& fit, Node& node);
   void linearRegressionNormalCopyScratch(const BARTFit& fit, Node& target, const Node& source);
   void linearRegressionNormalPrintScratch(const BARTFit& fit, const Node& node);
   
-  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node);
-  void linearRegressionNormalUpdateScratchWithValues(const BARTFit& fit, const Node& node, const double* y);
-  void linearRegressionNormalUpdateScratchWithMembershipsAndValues(const BARTFit& fit, const Node& node, const double* y);
-  void linearRegressionNormalUpdateScratchFromChildren(const BARTFit& fit, Node& parent, const double* y, const Node& leftChild, const Node& rightChild);
+  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node, double residualVariance);
+  void linearRegressionNormalPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+  void linearRegressionNormalUpdateMembershipsAndPrepareScratch(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+  void linearRegressionNormalPrepareScratchFromChildren(const BARTFit& fit, Node& parent, const double* y, double residualVariance, const Node& leftChild, const Node& rightChild);
 /* 
   int linearRegressionNormalWriteScratch(const Node& node, ext_binaryIO* bio);
   int linearRegressionNormalReadScratch(Node& node, ext_binaryIO* bio);
@@ -372,17 +376,17 @@ namespace dbarts {
       
       model.getPrediction = &linearRegressionNormalGetPrediction;
       model.getPredictions = &linearRegressionNormalGetPredictions;
-      model.getPredictionsForIndices = &linearRegressionNormalGetPredictionsForIndices;
+      // model.getPredictionsForIndices = &linearRegressionNormalGetPredictionsForIndices;
       
       model.createScratch = &linearRegressionNormalCreateScratch;
       model.destroyScratch = &linearRegressionNormalDestroyScratch;
       model.copyScratch = &linearRegressionNormalCopyScratch;
       model.printScratch = &linearRegressionNormalPrintScratch;
       
-      model.updateScratchWithValues = &linearRegressionNormalUpdateScratchWithValues;
       model.updateScratchWithMemberships = &linearRegressionNormalUpdateScratchWithMemberships;
-      model.updateScratchWithMembershipsAndValues = &linearRegressionNormalUpdateScratchWithMembershipsAndValues;
-      model.updateScratchFromChildren = &linearRegressionNormalUpdateScratchFromChildren;
+      model.prepareScratchForLikelihoodAndPosteriorCalculations = &linearRegressionNormalPrepareScratchForLikelihoodAndPosteriorCalculations;
+      model.updateMembershipsAndPrepareScratch = &linearRegressionNormalUpdateMembershipsAndPrepareScratch;
+      model.prepareScratchFromChildren = &linearRegressionNormalPrepareScratchFromChildren;
       
       model.writeScratch = NULL; // &linearRegressionNormalWriteScratch;
       model.readScratch = NULL; // &linearRegressionNormalReadScratch;
@@ -427,7 +431,7 @@ namespace {
   using dbarts::EndNode::LinearRegressionNormalModel;
   
   double* createXtForNode(const BARTFit& fit, const Node& node);
-  void calculateCovarianceRightFactor(const BARTFit& fit, const Node& node, const double* Xt, double* R);
+  void calculateCovarianceRightFactor(const BARTFit& fit, const Node& node, const double* Xt, double* R, double residualVariance);
   
   double linearRegressionNormalLogIntegratedLikelihood(const BARTFit& fit, const Node& node, const double*, double)
   {
@@ -456,7 +460,7 @@ namespace {
                                      false, EXT_TRIANGLE_TYPE_UPPER, scratch.coefficients, 1);
   }
   
-  double linearRegressionNormalGetPrediction(const BARTFit& fit, const Node& node, const double*, const double* Xt)
+  double linearRegressionNormalGetPrediction(const BARTFit& fit, const Node& node, const double* Xt)
   {
     DEFINE_SCRATCH(node);
     
@@ -464,22 +468,27 @@ namespace {
     return scratch.coefficients[0] + ext_dotProduct(Xt, fit.data.numPredictors, scratch.coefficients + 1);
   }
   
-  void linearRegressionNormalGetPredictions(const BARTFit& fit, const Node& node, const double*, double* y_hat)
+  void linearRegressionNormalGetPredictions(const BARTFit& fit, const Node& node, double* y_hat)
   {
     DEFINE_MODEL(fit);
     DEFINE_SCRATCH(node);
     
-    ext_multiplyMatrixIntoVector(model.Xt, fit.data.numPredictors + 1, fit.data.numObservations, true,
-                                 scratch.coefficients, y_hat);
+    if (node.isTop()) {
+      ext_multiplyMatrixIntoVector(model.Xt, fit.data.numPredictors + 1, fit.data.numObservations, true,
+                                   scratch.coefficients, y_hat);
+    } else {
+      ext_multiplyMatrixIntoVector(scratch.Xt, fit.data.numPredictors + 1, node.getNumObservations(), true,
+                                   scratch.coefficients, y_hat);
+    }
   }
   
-  void linearRegressionNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double*, const std::size_t*, double* y_hat)
+  /* void linearRegressionNormalGetPredictionsForIndices(const BARTFit& fit, const Node& node, const double*, const std::size_t*, double* y_hat)
   {
     DEFINE_SCRATCH(node);
     
     ext_multiplyMatrixIntoVector(scratch.Xt, fit.data.numPredictors + 1, node.getNumObservations(), true,
                                  scratch.coefficients, y_hat);
-  }
+  } */
   
   void linearRegressionNormalCreateScratch(const BARTFit& fit, Node& node)
   {
@@ -542,7 +551,7 @@ namespace {
     for (size_t i = 0; i < numToPrint; ++i) ext_printf(" %f", scratch.coefficients[i]);
   }
   
-  void linearRegressionNormalUpdateScratchWithValues(const BARTFit& fit, const Node& node, const double* y)
+  void linearRegressionNormalPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const Node& node, const double* y, double residualVariance)
   {
     DEFINE_SCRATCH(node);
     
@@ -576,7 +585,7 @@ namespace {
     // y_hat - y
     ext_addVectorsInPlace(nodeY, numObservations, -1.0, y_hat);
     
-    scratch.exponentialTerm = 0.5 * ext_dotProduct(nodeY, numObservations, y_hat) / (fit.state.sigma * fit.state.sigma);
+    scratch.exponentialTerm = 0.5 * ext_dotProduct(nodeY, numObservations, y_hat) / residualVariance;
     
     ext_stackFree(y_hat);
     ext_stackFree(beta_tilde);
@@ -584,7 +593,7 @@ namespace {
     if (nodeY != y) delete [] nodeY;
   }
   
-  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node) {
+  void linearRegressionNormalUpdateScratchWithMemberships(const BARTFit& fit, const Node& node, double residualVariance) {
     DEFINE_MODEL(fit);
     DEFINE_SCRATCH(node);
     
@@ -592,26 +601,17 @@ namespace {
         
     scratch.Xt = node.isTop() ? const_cast<double*>(model.Xt) : createXtForNode(fit, node);
     
-    calculateCovarianceRightFactor(fit, node, scratch.Xt, scratch.posteriorCovarianceRightFactor);
+    calculateCovarianceRightFactor(fit, node, scratch.Xt, scratch.posteriorCovarianceRightFactor, residualVariance);
   }
   
-  void linearRegressionNormalUpdateScratchWithMembershipsAndValues(const BARTFit& fit, const Node& node, const double* y)
+  void linearRegressionNormalUpdateMembershipsAndPrepareScratch(const BARTFit& fit, const Node& node, const double* y, double residualVariance)
   {
-    /* DEFINE_MODEL(fit);
-    DEFINE_SCRATCH(node);
+    linearRegressionNormalUpdateScratchWithMemberships(fit, node, residualVariance);
     
-    if (scratch.Xt != model.Xt) delete [] scratch.Xt;
-    
-    scratch.Xt = node.isTop() ? const_cast<double*>(model.Xt) : createXtForNode(fit, node);
-    
-    calculateCovarianceRightFactor(fit, node, scratch.Xt, scratch.posteriorCovarianceRightFactor); */
-    
-    linearRegressionNormalUpdateScratchWithMemberships(fit, node);
-    
-    linearRegressionNormalUpdateScratchWithValues(fit, node, y);
+    linearRegressionNormalPrepareScratchForLikelihoodAndPosteriorCalculations(fit, node, y, residualVariance);
   }
   
-  void linearRegressionNormalUpdateScratchFromChildren(const BARTFit& fit, Node& parentNode, const double* y, const Node& leftChildNode, const Node& rightChildNode)
+  void linearRegressionNormalPrepareScratchFromChildren(const BARTFit& fit, Node& parentNode, const double* y, double residualVariance, const Node& leftChildNode, const Node& rightChildNode)
   {
     DEFINE_MODEL(fit);
     LinearRegressionNormalNodeScratch& parent(*static_cast<LinearRegressionNormalNodeScratch*>(parentNode.getScratch()));
@@ -627,9 +627,9 @@ namespace {
       parent.Xt = const_cast<double*>(model.Xt);
     }
     
-    calculateCovarianceRightFactor(fit, parentNode, parent.Xt, parent.posteriorCovarianceRightFactor);
+    calculateCovarianceRightFactor(fit, parentNode, parent.Xt, parent.posteriorCovarianceRightFactor, residualVariance);
     
-    linearRegressionNormalUpdateScratchWithValues(fit, parentNode, y);
+    linearRegressionNormalPrepareScratchForLikelihoodAndPosteriorCalculations(fit, parentNode, y, residualVariance);
   }
   
   double* createXtForNode(const BARTFit& fit, const Node& node)
@@ -652,7 +652,7 @@ namespace {
     return Xt;
   }
   
-  void calculateCovarianceRightFactor(const BARTFit& fit, const Node& node, const double* Xt, double* R)
+  void calculateCovarianceRightFactor(const BARTFit& fit, const Node& node, const double* Xt, double* R, double residualVariance)
   {
     DEFINE_MODEL(fit);
     
@@ -662,7 +662,7 @@ namespace {
     ext_getSingleMatrixCrossproduct(Xt, numPredictors, numObservations, R, true, EXT_TRIANGLE_TYPE_UPPER);
     
     // add in prior contribution
-    for (size_t i = 0; i < numPredictors; ++i) R[i * (1 + numPredictors)] += model.precisions[i] * fit.state.sigma * fit.state.sigma;
+    for (size_t i = 0; i < numPredictors; ++i) R[i * (1 + numPredictors)] += model.precisions[i] * residualVariance;
     
     ext_getSymmetricPositiveDefiniteTriangularFactorizationInPlace(R, numPredictors, EXT_TRIANGLE_TYPE_UPPER);
   }

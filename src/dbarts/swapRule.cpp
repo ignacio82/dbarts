@@ -62,6 +62,8 @@ namespace dbarts {
     NodeVector swappableNodes(tree.getSwappableVector());
     size_t numSwappableNodes = swappableNodes.size();
     
+    double sigma_sq = fit.state.sigma * fit.state.sigma;
+    
     //if there are no swappable rule back out
     if (numSwappableNodes == 0) return -1.0;
     
@@ -121,8 +123,8 @@ namespace dbarts {
         
         parent.getRule().swapWith(child.getRule());
         
-        // parent.updateMembershipsAndValues(fit, y);
-        parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+        parent.updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, sigma_sq);
+        // parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         //  fix VarAvail
         parentVariableIndex = parent.getRule().variableIndex;
@@ -179,8 +181,8 @@ namespace dbarts {
         rightChild.getRule() = leftChild.getRule();
         // std::memcpy(&parent.rightChild->getRule(), &parent.leftChild->getRule(), sizeof(Rule));
         
-        // parent.updateMembershipsAndValues(fit, y);
-        parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+        parent.updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, sigma_sq);
+        // parent.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         //  fix VarAvail
         childVariableIndex = leftChild.getRule().variableIndex;

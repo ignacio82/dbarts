@@ -60,6 +60,9 @@ namespace {
                     double sigma, const uint32_t* variableCounts, size_t simNum);
   void countVariableUses(const BARTFit& fit, uint32_t* variableCounts);
   
+  void updateTrainingFits(const BARTFit& fit, double* currTreeFits, double* totalFits);
+  void updateTestFits(const BARTFit& fit, double* totalTestFits);
+  
 #ifdef HAVE_SYS_TIME_H
   double subtractTimes(struct timeval end, struct timeval start);
 #else
@@ -125,44 +128,33 @@ namespace dbarts {
       }
     }
     
-    double** nodePosteriorPredictions = new double*[control.numTrees];
-    for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
+    double sigma_sq = state.sigma * state.sigma;
+    // double** nodePosteriorPredictions = new double*[control.numTrees];
+    // for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
     
-    bool treesAreValid = true;
+    bool allTreesAreValid = true;
     size_t treeNum = 0;
-    for ( ; treeNum < control.numTrees && treesAreValid == true; ++treeNum) {
+    for ( ; treeNum < control.numTrees && allTreesAreValid == true; ++treeNum) {
       Tree& tree_i(*TREE_AT(state.trees, treeNum, scratch.nodeSize));
-      const double* treeFits = state.treeFits + treeNum * data.numObservations;
+      // const double* treeFits = state.treeFits + treeNum * data.numObservations;
       
       // next allocates memory
-      nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
+      // nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      // tree_i.updateMemberships(*this);
-      tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
+      tree_i.updateWithNewCovariates(*this, sigma_sq);
+      // tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
       
-      treesAreValid &= tree_i.isValid();
+      allTreesAreValid &= tree_i.isValid();
     }
     
     
-    if (treesAreValid) {
-      // go back across bottoms and set predictions to those mus for obs now in node
-      for (size_t i = 0; i < control.numTrees; ++i) {
-      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
-        double* treeFits = state.treeFits + i * data.numObservations;
-        
-        ext_addVectorsInPlace(treeFits, data.numObservations, -1.0, state.totalFits);
-        
-        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
-        
-        ext_addVectorsInPlace(treeFits, data.numObservations, 1.0, state.totalFits);
-      }
-    }
+    if (allTreesAreValid) updateTrainingFits(*this, state.treeFits, state.totalFits);
     
     
-    for (size_t i = control.numTrees; i > 0; --i) delete [] nodePosteriorPredictions[i - 1];
-    delete [] nodePosteriorPredictions;
+    // for (size_t i = control.numTrees; i > 0; --i) delete [] nodePosteriorPredictions[i - 1];
+    // delete [] nodePosteriorPredictions;
     
-    return treesAreValid;
+    return allTreesAreValid;
   }
   
   bool BARTFit::updatePredictor(const double* newPredictor, size_t column)
@@ -197,26 +189,27 @@ namespace dbarts {
     
     
     // check validity of new columns and recover node posterior samples
-    bool treesAreValid = true;
+    bool allTreesAreValid = true;
     
-    double** nodePosteriorPredictions = new double*[control.numTrees];
-    for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
+    // double** nodePosteriorPredictions = new double*[control.numTrees];
+    // for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
+    double sigma_sq = state.sigma * state.sigma;
     
     size_t treeNum;
-    for (treeNum = 0; treeNum < control.numTrees && treesAreValid == true; ++treeNum) {
+    for (treeNum = 0; treeNum < control.numTrees && allTreesAreValid == true; ++treeNum) {
       Tree& tree_i(*TREE_AT(state.trees, treeNum, scratch.nodeSize));
-      const double* treeFits = state.treeFits + treeNum * data.numObservations;
+      // const double* treeFits = state.treeFits + treeNum * data.numObservations;
       
-      nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
+      // nodePosteriorPredictions[treeNum] = tree_i.recoverAveragesFromFits(*this, treeFits);
       
-      // tree_i.updateMemberships(*this);
-      tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
+      tree_i.updateWithNewCovariates(*this, sigma_sq);
+      // tree_i.updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
       
-      treesAreValid &= tree_i.isValid();
+      allTreesAreValid &= tree_i.isValid();
     }
     
     
-    if (!treesAreValid) {
+    if (!allTreesAreValid) {
       for (size_t i = 0; i < numColumns; ++i) {
         std::memcpy(X + columns[i] * data.numObservations, oldPredictor + i * data.numObservations, data.numObservations * sizeof(double));
         
@@ -228,30 +221,19 @@ namespace dbarts {
       }
       
       // for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateMemberships(*this);
-      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateState(*this, NULL, BART_NODE_UPDATE_COVARIATES_CHANGED);
+      for (size_t i = 0; i < treeNum; ++i) TREE_AT(state.trees, i, scratch.nodeSize)->updateWithNewCovariates(*this, sigma_sq);
     } else {
-      
-      // go back across bottoms and set predictions to those mus for obs now in node
-      for (size_t i = 0; i < control.numTrees; ++i) {
-        Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
-        double* treeFits = state.treeFits + i * data.numObservations;
-        
-        ext_addVectorsInPlace(treeFits, data.numObservations, -1.0, state.totalFits);
-        
-        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
-        
-        ext_addVectorsInPlace(treeFits, data.numObservations, 1.0, state.totalFits);
-      }
+      updateTrainingFits(*this, state.treeFits, state.totalFits);
     }
     
-    for (size_t i = control.numTrees; i > 0; --i) delete [] nodePosteriorPredictions[i - 1];
-    delete [] nodePosteriorPredictions;
+    // for (size_t i = control.numTrees; i > 0; --i) delete [] nodePosteriorPredictions[i - 1];
+    // delete [] nodePosteriorPredictions;
     
     for (size_t i = 0; i < numColumns; ++i) delete [] oldCutPoints[i];
     delete [] oldCutPoints;
     delete [] oldPredictor;
     
-    return treesAreValid;
+    return allTreesAreValid;
   }
   
 #define INVALID_ADDRESS reinterpret_cast<const double*>(this)
@@ -293,24 +275,7 @@ namespace dbarts {
       
       if (testOffset != INVALID_ADDRESS) data.testOffset = testOffset;
       
-      double* currTestFits = new double[data.numTestObservations];
-    
-      ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
-    
-      for (size_t i = 0; i < control.numTrees; ++i) {
-        Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
-        const double* treeFits = state.treeFits + i * data.numObservations;
-      
-        const double* nodePosteriorPredictions = tree_i.recoverAveragesFromFits(*this, treeFits);
-      
-        tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
-      
-        ext_addVectorsInPlace(currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
-        
-        delete [] nodePosteriorPredictions;
-      }
-      
-      delete [] currTestFits;
+      updateTestFits(*this, state.totalTestFits);
     }
   }
 #undef INVALID_ADDRESS
@@ -332,24 +297,7 @@ namespace dbarts {
       }
     }
     
-    double* currTestFits = new double[data.numTestObservations];
-    
-    ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
-    
-    for (size_t i = 0; i < control.numTrees; ++i) {
-      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
-      const double* treeFits = state.treeFits + i * data.numObservations;
-      
-      const double* nodePosteriorPredictions = tree_i.recoverAveragesFromFits(*this, treeFits);
-      
-      tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
-      
-      ext_addVectorsInPlace(currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
-      
-      delete [] nodePosteriorPredictions;
-    }
-    
-    delete [] currTestFits;
+    updateTestFits(*this, state.totalTestFits);
   }
   
   BARTFit::BARTFit(Control control, Model model, Data data) :
@@ -463,11 +411,11 @@ namespace dbarts {
         // this should cache in the bottom nodes values necessary to a) calculate log likelihood/log integrated
         // likelihood and b) sample from the posterior of the parameters for the model
         // tree_i.updateBottomNodesWithValues(*this, scratch.treeY);
-        tree_i.updateState(*this, scratch.treeY, BART_NODE_UPDATE_VALUES_CHANGED | BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED);
+        tree_i.prepareForMetropolisStep(*this, scratch.treeY, sigma_sq);
         
         tree_i.drawFromTreeStructurePosterior(*this, scratch.treeY, sigma_sq);
         tree_i.drawFromEndNodePosteriors(*this, scratch.treeY, sigma_sq);
-        tree_i.getFits(*this, scratch.treeY, currFits, isThinningIteration ? NULL : currTestFits);
+        tree_i.getFits(*this, currFits, isThinningIteration ? NULL : currTestFits);
         
         // remove old tree fits from total and add in current
         updateTotalFits(oldTreeFits, currFits, data.numObservations, state.totalFits);
@@ -977,6 +925,54 @@ namespace {
     
     double* variableCountSamples = results.variableCountSamples + simNum * data.numPredictors;
     for (size_t i = 0; i < data.numPredictors; ++i) variableCountSamples[i] = static_cast<double>(variableCounts[i]);
+  }
+  
+  void updateTrainingFits(const BARTFit& fit, double* currTreeFits, double* totalFits)
+  {
+    const Data& data(fit.data);
+    const Control& control(fit.control);
+    const Scratch& scratch(fit.scratch);
+    const State& state(fit.state);
+        
+    for (size_t i = 0; i < control.numTrees; ++i) {
+      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
+      double* treeFits = currTreeFits + i * data.numObservations;
+      
+      ext_addVectorsInPlace(treeFits, data.numObservations, -1.0, totalFits);
+      
+      tree_i.getFits(fit, treeFits, NULL);
+      // tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions[i], treeFits, NULL);
+      
+      ext_addVectorsInPlace(treeFits, data.numObservations, 1.0, totalFits);
+    }
+  }
+  
+  void updateTestFits(const BARTFit& fit, double* totalTestFits)
+  {
+    const Data& data(fit.data);
+    const Control& control(fit.control);
+    const Scratch& scratch(fit.scratch);
+    const State& state(fit.state);
+    
+    double* currTestFits = new double[data.numTestObservations];
+    
+    ext_setVectorToConstant(totalTestFits, data.numTestObservations, 0.0);
+    
+    for (size_t i = 0; i < control.numTrees; ++i) {
+      Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
+      // const double* treeFits = state.treeFits + i * data.numObservations;
+      
+      // const double* nodePosteriorPredictions = tree_i.recoverAveragesFromFits(*this, treeFits);
+      
+      // tree_i.setCurrentFitsFromAverages(*this, nodePosteriorPredictions, NULL, currTestFits);
+      tree_i.getFits(fit, NULL, currTestFits);
+      
+      ext_addVectorsInPlace(currTestFits, data.numTestObservations, 1.0, state.totalTestFits);
+      
+      // delete [] nodePosteriorPredictions;
+    }
+    
+    delete [] currTestFits; 
   }
   
   

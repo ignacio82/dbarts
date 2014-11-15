@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <vector>
 
+#include <dbarts/bartFit.hpp>
+#include <dbarts/model.hpp>
 #include <dbarts/types.hpp>
 
 #define NODE_AT(_V_, _I_, _S_) reinterpret_cast<Node*>(reinterpret_cast<char*>(_V_) + (_I_) * _S_)
@@ -13,7 +15,7 @@ namespace dbarts {
   using std::size_t;
   using std::uint32_t;
   
-  struct BARTFit;
+//  struct BARTFit;
   
   namespace EndNode { struct Model; }
   
@@ -89,8 +91,10 @@ namespace dbarts {
 #define BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED  0x1
 #define BART_NODE_UPDATE_VALUES_CHANGED          0x2
 #define BART_NODE_UPDATE_RESPONSE_PARAMS_CHANGED 0x4
-    void updateState(const BARTFit& fit, const double* y, uint32_t updateType);
+    // void updateState(const BARTFit& fit, const double* y, uint32_t updateType);
     
+    void updateMemberships(const BARTFit& fit, double residualVariance);
+    void updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(const BARTFit& fit, const double* y, double residualVariance);
     
     // deep copies
     void copyFrom(const BARTFit& fit, const Node& other);
@@ -137,8 +141,8 @@ namespace dbarts {
     void clear(const BARTFit& fit);
     
     void drawFromPosterior(const BARTFit& fit, const double* y, double residualVariance) const;
-    void getPredictions(const BARTFit& fit, const double* y, double* y_hat) const;     // uses training data
-    double getPrediction(const BARTFit& fit, const double* y, const double* Xt) const; // uses input Xt
+    void getPredictions(const BARTFit& fit, double* y_hat) const;     // uses training data
+    double getPrediction(const BARTFit& fit, const double* Xt) const; // uses input Xt
         
     size_t getDepth() const;
     size_t getDepthBelow() const;
@@ -147,8 +151,8 @@ namespace dbarts {
     size_t getNumVariablesAvailableForSplit(size_t numVariables) const;
     
     // these do not delete node scratches so that they can be reverted
-    void split(const BARTFit& fit, const Rule& rule, const double* y, bool exhaustedLeftSplits, bool exhaustedRightSplits);
-    void orphanChildren(const BARTFit& fit, const double* y);
+    void split(const BARTFit& fit, const Rule& rule, const double* y, double residualVariance, bool exhaustedLeftSplits, bool exhaustedRightSplits);
+    void orphanChildren(const BARTFit& fit, const double* y, double residualVariance);
     
     void countVariableUses(uint32_t* variableCounts) const;
   };
@@ -186,6 +190,9 @@ namespace dbarts {
 
   inline size_t Node::getNumObservations() const { return numObservations; }
   inline const size_t* Node::getObservationIndices() const { return observationIndices; }
+  
+  inline double Node::getPrediction(const BARTFit& fit, const double* Xt) const { return fit.model.endNodeModel->getPrediction(fit, *this, Xt); }
+  inline void Node::getPredictions(const BARTFit& fit, double* y_hat) const { return fit.model.endNodeModel->getPredictions(fit, *this, y_hat); }
   
   template<class T> T* Node::subsetVector(const T* v) const {
     T* result = new T[numObservations];

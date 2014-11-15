@@ -24,6 +24,20 @@ struct ext_binaryIO;
 // a call to create the scratch is issued. If that node gives birth, the scratch
 // will be destroyed. This can bloat the size of a node, so if a lot of memory needs
 // to be allocated just make the official scratch a pointer to something elsewhere.
+//
+// As to implementing these things: we use a bit of slight of hand to cache
+// calculations. In general, the end node model should store the value of its
+// parameters and be able to use those to make a prediction. The one exception to
+// this is the following sequence of calls:
+//   prepareScratchForLikelihoodAndPosteriorCalculations
+//   computeLogIntegratedLikelihood
+//   drawFromPosterior
+// 
+// The idea is that during prepareScratchForLikelihoodAndPosteriorCalculations,
+// values used in *both* the likelihood and posterior steps can be cached. Until
+// drawFromPosterior is called, the internal state, including the parameters, can be
+// clobbered. Note that  the likelihood call may not be made on every node, so it does
+// not make sense to precompute anything exclusive to that step.
 
 namespace dbarts {
   struct BARTFit;
@@ -48,22 +62,22 @@ namespace dbarts {
       void (*drawFromPrior)(const BARTFit& fit, const Node& node);
       void (*drawFromPosterior)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
       
-      double (*getPrediction)(const BARTFit& fit, const Node& node, const double* y, const double* Xt); // at given Xt
-      void (*getPredictions)(const BARTFit& fit, const Node& node, const double* y, double* y_hat);     // at all of training, i.e. fit.scratch.Xt
-      void (*getPredictionsForIndices)(const BARTFit& fit, const Node& node, const double* y, const std::size_t* indices, double* y_hat);
+      double (*getPrediction)(const BARTFit& fit, const Node& node, const double* Xt); // at given Xt
+      void (*getPredictions)(const BARTFit& fit, const Node& node, double* y_hat);     // at all of training, i.e. fit.scratch.Xt
+      // void (*getPredictionsForIndices)(const BARTFit& fit, const Node& node, const double* y, const std::size_t* indices, double* y_hat);
       
       void (*createScratch)(const BARTFit& fit, Node& node);
       void (*destroyScratch)(const BARTFit& fit, Node& node);
       void (*copyScratch)(const BARTFit& fit, Node& target, const Node& source);
       void (*printScratch)(const BARTFit& fit, const Node &node);
       
-      // updateScratchWithValues - just the values of y (or residuals, really) have changed
-      // updateScratchWithMemberships - obs in node are different, so new indices, new covariates
-      void (*updateScratchWithValues)(const BARTFit& fit, const Node& node, const double* y);
-      void (*updateScratchWithMemberships)(const BARTFit& fit, const Node& node);
-      void (*updateScratchWithMembershipsAndValues)(const BARTFit& fit, const Node& node, const double* y);
-      // updateScratchFromChildren - the parent is about to become the new end-node and can potentially scavenge some info from its children
-      void (*updateScratchFromChildren)(const BARTFit& fit, Node& parent, const double* y, const Node& leftChild, const Node& rightChild);
+      
+      void (*updateScratchWithMemberships)(const BARTFit& fit, const Node& node, double residualVariance);
+      void (*prepareScratchForLikelihoodAndPosteriorCalculations)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
+      void (*updateMembershipsAndPrepareScratch)(const BARTFit& fit, const Node& node, const double* y, double residualVariance); // combines the above two
+      
+      // prepareScratchFromChildren - the parent is about to become the new end-node and can potentially scavenge some info from its children
+      void (*prepareScratchFromChildren)(const BARTFit& fit, Node& parent, const double* y, double residualVariance, const Node& leftChild, const Node& rightChild);
       
       int (*writeScratch)(const Node& node, ext_binaryIO* bio);
       int (*readScratch)(Node& node, ext_binaryIO* bio);

@@ -34,7 +34,7 @@ birthDeathRule.hpp :
 changeRule.hpp : 
 functions.hpp : $(BART_INC)/types.hpp
 likelihood.hpp :
-node.hpp : $(BART_INC)/types.hpp
+node.hpp : $(BART_INC)/bartFit.hpp $(BART_INC)/model.hpp $(BART_INC)/types.hpp
 prior.hpp :
 swapRule.hpp : 
 tree.hpp : node.hpp

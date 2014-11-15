@@ -73,6 +73,8 @@ namespace dbarts {
     NodeVector notBottomNodes(tree.getNotBottomVector());
     size_t numNotBottomNodes = notBottomNodes.size();
     
+    double sigma_sq = fit.state.sigma * fit.state.sigma;
+    
     // get list of nodes with rule = nodes which are not bottom
     if (numNotBottomNodes == 0) return -1.0;
     
@@ -129,8 +131,8 @@ namespace dbarts {
         }
         
         // fix data at nodes below nodeToChange given new rule
-        // nodeToChange.updateMembershipsAndValues(fit, y);
-        nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+        nodeToChange.updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, sigma_sq);
+        // nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         // fix VarAvail
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
@@ -186,8 +188,8 @@ namespace dbarts {
         nodeToChange.getRule().variableIndex = newVariableIndex;
         nodeToChange.getRule().splitIndex    = newRuleIndex;
         
-        // nodeToChange.updateMembershipsAndValues(fit, y);
-        nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
+        nodeToChange.updateMembershipsAndPrepareScratchForLikelihoodAndPosteriorCalculations(fit, y, sigma_sq);
+        // nodeToChange.updateState(fit, y, BART_NODE_UPDATE_TREE_STRUCTURE_CHANGED | BART_NODE_UPDATE_VALUES_CHANGED);
         
         updateVariablesAvailable(fit, nodeToChange, newVariableIndex);
         if (newVariableIndex != oldState.rule.variableIndex) updateVariablesAvailable(fit, nodeToChange, oldState.rule.variableIndex);

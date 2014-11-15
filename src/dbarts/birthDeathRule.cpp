@@ -54,6 +54,8 @@ namespace dbarts {
     // Rather than flipping a coin to see if birth or death, we have to first check that either is possible.
     // Since that involves pretty much finding a node to give birth, we just do that and then possibly ignore
     // it.
+    
+    double sigma_sq = fit.state.sigma * fit.state.sigma;
 
     double transitionProbabilityOfSelectingNodeForBirth;
     Node* nodeToChangePtr = drawBirthableNode(fit, tree, &transitionProbabilityOfSelectingNodeForBirth);
@@ -76,7 +78,7 @@ namespace dbarts {
 
       bool exhaustedLeftSplits, exhaustedRightSplits;
       Rule newRule = fit.model.treePrior->drawRuleAndVariable(fit, nodeToChange, &exhaustedLeftSplits, &exhaustedRightSplits);
-      nodeToChange.split(fit, newRule, y, exhaustedLeftSplits, exhaustedRightSplits);
+      nodeToChange.split(fit, newRule, y, sigma_sq, exhaustedLeftSplits, exhaustedRightSplits);
       
       // determine how to go backwards
       double leftPriorGrowthProbability  = fit.model.treePrior->computeGrowthProbability(fit, *nodeToChange.getLeftChild());
@@ -125,7 +127,7 @@ namespace dbarts {
       //copyOfOriginalNode.copyFrom(nodeToChange);
       
       // now figure out how the node could have given birth
-      nodeToChange.orphanChildren(fit, y);
+      nodeToChange.orphanChildren(fit, y, sigma_sq);
       
       double newLogLikelihood = computeLogLikelihoodForBranch(fit, nodeToChange, y);
       transitionProbabilityOfBirthStep = computeProbabilityOfBirthStep(fit, tree, true);
