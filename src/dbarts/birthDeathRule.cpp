@@ -289,7 +289,7 @@ namespace {
   void acceptBirth(const BARTFit& fit, Node& copyOfOriginalNode)
   {
     // no longer an end-node
-    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, copyOfOriginalNode);
+    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, copyOfOriginalNode.getScratch());
   }
   
   void rejectBirth(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
@@ -309,7 +309,7 @@ namespace {
   void rejectDeath(const BARTFit& fit, const Node& copyOfOriginalNode, Node& modifiedNode)
   {
     // no longer an end-node
-    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, modifiedNode);
+    if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, modifiedNode.getScratch());
     std::memcpy(&modifiedNode, &copyOfOriginalNode, fit.scratch.nodeSize);
     // modifiedNode.copyFrom(fit, copyOfOriginalNode);
   }

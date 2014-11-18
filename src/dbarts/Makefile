@@ -45,7 +45,7 @@ bartFit.o : bartFit.cpp $(BART_INC)/bartFit.hpp $(BART_INC)/results.hpp binaryIO
 binaryIO.o : binaryIO.cpp binaryIO.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/control.hpp $(BART_INC)/data.hpp $(BART_INC)/endNodeModel.hpp $(BART_INC)/model.hpp tree.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c binaryIO.cpp -o binaryIO.o
 
-birthDeathRule.o : birthDeathRule.cpp birthDeathRule.hpp functions.hpp likelihood.hpp node.hpp tree.hpp
+birthDeathRule.o : birthDeathRule.cpp birthDeathRule.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/model.hpp likelihood.hpp node.hpp tree.hpp
 	$(CXX) $(ALL_CPPFLAGS) $(CXXFLAGS) -c birthDeathRule.cpp -o birthDeathRule.o
 
 changeRule.o : changeRule.cpp changeRule.hpp $(BART_INC)/bartFit.hpp $(BART_INC)/model.hpp $(BART_INC)/scratch.hpp $(BART_INC)/types.hpp functions.hpp likelihood.hpp node.hpp tree.hpp

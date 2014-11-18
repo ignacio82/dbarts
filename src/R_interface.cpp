@@ -40,7 +40,7 @@ namespace {
   
   void initializeControlFromExpression(Control& control, SEXP controlExpr);
   // SEXP createControlExpressionFromFit(const BARTFit& fit);
-  void initializeModelFromExpression(Model& model, SEXP modelExpr, const Control& control);
+  void initializeModelFromExpression(Model& model, SEXP modelExpr, const Control& control, const Data& data);
   // SEXP createModelExpressionFromFit(const BARTFit& fit);
   void initializeDataFromExpression(Data& data, SEXP dataExpr);
   // SEXP createDataExpressionFromFit(const BARTFit& fit);
@@ -598,8 +598,8 @@ namespace {
     
     
     initializeControlFromExpression(control, controlExpr);
-    initializeModelFromExpression(model, modelExpr, control);
     initializeDataFromExpression(data, dataExpr);
+    initializeModelFromExpression(model, modelExpr, control, data);
     
     BARTFit* fit = new BARTFit(control, model, data);
     
@@ -1036,7 +1036,7 @@ namespace {
     }
   }
   
-  void initializeModelFromExpression(Model& model, SEXP modelExpr, const Control& control)
+  void initializeModelFromExpression(Model& model, SEXP modelExpr, const Control& control, const Data& data)
   {
     double d_temp;
     
@@ -1107,7 +1107,11 @@ namespace {
     d_temp = REAL(slotExpr)[0];
     if (ISNAN(d_temp)) error("k must be a real number.");
     if (d_temp <= 0.0) error("k must be positive.");
-    model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
+    // model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
+    double* precisions = new double[data.numPredictors + 1];
+    precisions[0] = 1.0 / (10.0 * 10.0);
+    for (size_t i = 1; i <= data.numPredictors; ++i) precisions[i] = 1.0 / (2.5 * 2.5);
+    model.endNodeModel = EndNode::createLinearRegressionNormalModel(data, precisions);
     
     
     priorExpr = GET_ATTR(modelExpr, install("resid.prior"));
@@ -1342,8 +1346,10 @@ namespace {
     delete [] fit->data.maxNumCuts;
     
     delete fit;
-    
-    delete endNodeModel;
+   
+    delete [] static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel)->precisions; 
+    destroyLinearRegressionNormalModel(static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel));
+    // delete endNodeModel;
     delete treePrior;
     delete sigmaSqPrior;
   }

@@ -388,7 +388,7 @@ namespace dbarts {
     time_t endTime;
     startTime = time(NULL);
 #endif
-    
+
     for (uint32_t k = 0; k < totalNumIterations; ++k) {
       isThinningIteration = ((k + 1) % control.treeThinningRate != 0);
             
@@ -776,6 +776,10 @@ namespace {
     if (data.numTestObservations > 0) {
       state.totalTestFits = new double[data.numTestObservations];
       for (size_t i = 0; i < data.numTestObservations; ++i) state.totalTestFits[i] = 0.0;
+    }
+    
+    for (size_t i = 0; i < control.numTrees; ++i) {
+      TREE_AT(state.trees, i, fit.scratch.nodeSize)->updateWithNewCovariates(fit, state.sigma * state.sigma);
     }
   }
   

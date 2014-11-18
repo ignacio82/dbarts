@@ -56,7 +56,7 @@ namespace {
     return map;
   }
 }
-
+#include <external/io.h>
 namespace dbarts {
   void Tree::drawFromTreeStructurePosterior(const BARTFit& fit, const double* y, double)
   {
@@ -65,11 +65,17 @@ namespace dbarts {
     double u = ext_rng_simulateContinuousUniform(fit.control.rng);
     
     if (u < fit.model.birthOrDeathProbability) {
+      // ext_printf("performing birth step:\n");
       birthOrDeathNode(fit, *this, y, &stepTaken, &birthedTree);
+      // ext_printf("  %s was %ssuccessful\n", birthedTree ? "birth" : "death", balsTaken ? "" : "not ");
     } else if (u < fit.model.birthOrDeathProbability + fit.model.swapProbability) { 
+      // ext_printf("performing swap step:\n");
       swapRule(fit, *this, y, &stepTaken);
+      // ext_printf("  swap was %ssuccessful\n", stepTaken ? "" : "not ");
     } else {
+      // ext_printf("performing change step:\n");
       changeRule(fit, *this, y, &stepTaken);
+      // ext_printf("  change was %ssuccessful\n", stepTaken ? "" : "not ");
     }
   }
   
@@ -120,7 +126,7 @@ namespace dbarts {
       if (trainingFits != NULL) {
         for (size_t i = 0; i < numBottomNodes; ++i) {
           const Node& bottomNode(*bottomNodes[i]);
-        
+          
           bottomNode.getPredictions(fit, trainingFits);
         }
       }

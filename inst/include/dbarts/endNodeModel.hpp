@@ -42,6 +42,7 @@ struct ext_binaryIO;
 namespace dbarts {
   struct BARTFit;
   struct Control;
+  struct Data;
   
   struct Node;
   
@@ -67,8 +68,10 @@ namespace dbarts {
       // void (*getPredictionsForIndices)(const BARTFit& fit, const Node& node, const double* y, const std::size_t* indices, double* y_hat);
       
       void (*createScratch)(const BARTFit& fit, Node& node);
-      void (*destroyScratch)(const BARTFit& fit, Node& node);
-      void (*copyScratch)(const BARTFit& fit, Node& target, const Node& source);
+      void (*destroyScratch)(const BARTFit& fit, void* scratch);
+      void (*storeScratch)(const BARTFit& fit, const Node& source, void* target); // deep copies
+      void (*restoreScratch)(const BARTFit& fit, void* source, Node& target); // destroys source as well
+      
       void (*printScratch)(const BARTFit& fit, const Node &node);
       
       
@@ -81,9 +84,6 @@ namespace dbarts {
       
       int (*writeScratch)(const Node& node, ext_binaryIO* bio);
       int (*readScratch)(Node& node, ext_binaryIO* bio);
-
-      void (*storeScratch)(const Node& node, void* target);
-      void (*restoreScratch)(Node& node, const void* source);
     };
     
     struct MeanNormalModel : Model {
@@ -100,9 +100,9 @@ namespace dbarts {
       const double* precisions; // vector of inverse of prior variances
     };
   
-    LinearRegressionNormalModel* createLinearRegressionNormalModel(const BARTFit& fit);
+    LinearRegressionNormalModel* createLinearRegressionNormalModel(const Data& data, const double* precisions);
     void destroyLinearRegressionNormalModel(LinearRegressionNormalModel* model);
-    void initializeLinearRegressionNormalModel(const BARTFit& fit, LinearRegressionNormalModel& model);
+    void initializeLinearRegressionNormalModel(LinearRegressionNormalModel& model, const Data& data, const double* precisions);
     void invalidateLinearRegressionNormalModel(LinearRegressionNormalModel& model);
   }
 }

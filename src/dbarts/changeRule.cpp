@@ -39,6 +39,7 @@ namespace {
     
     void* scratches;
     
+    size_t numBottomNodes;
     size_t numNodesInSubtree;
     bool* variablesAvailable;
 
@@ -47,7 +48,7 @@ namespace {
     size_t** observationIndices;     // duplicates content of original
     
     void store(const BARTFit& fit, const Node& node);
-    void destroy();
+    void destroy(const BARTFit& fit);
     void restore(const BARTFit& fit, Node& node); // invalidates afterwards
   };
 }
@@ -147,7 +148,7 @@ namespace dbarts {
         alpha = (alpha > 1.0 ? 1.0 : alpha);
         
         if (ext_rng_simulateBernoulli(fit.control.rng, alpha) == 1) {
-          oldState.destroy();
+          oldState.destroy(fit);
           
           *stepTaken = true;
         } else {
@@ -202,7 +203,7 @@ namespace dbarts {
         alpha = (alpha > 1.0 ? 1.0 : alpha);
         
         if (ext_rng_simulateBernoulli(fit.control.rng, alpha) == 1) {	
-          oldState.destroy();
+          oldState.destroy(fit);
           *stepTaken = true;
         } else {
           oldState.restore(fit, nodeToChange);
@@ -392,7 +393,7 @@ namespace {
     ++nodeIndex;
     
     if (node.isBottom()) {
-      fit.model.endNodeModel->storeScratch(node, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      fit.model.endNodeModel->storeScratch(fit, node, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
       ++bottomNodeIndex;
       return;
     }
@@ -411,7 +412,7 @@ namespace {
     ++nodeIndex;
     
     if (node.isBottom()) {
-      fit.model.endNodeModel->restoreScratch(node, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize);
+      fit.model.endNodeModel->restoreScratch(fit, static_cast<char*>(state.scratches) + bottomNodeIndex * fit.model.endNodeModel->perNodeScratchSize, node);
       ++bottomNodeIndex;
       return;
     }
@@ -423,7 +424,7 @@ namespace {
   void ::State::store(const BARTFit& fit, const Node& node) {
     rule = node.getRule();
     
-    size_t numBottomNodes = node.getNumBottomNodes();
+    numBottomNodes = node.getNumBottomNodes();
     
     scratches = ::operator new(numBottomNodes * fit.model.endNodeModel->perNodeScratchSize);
     
@@ -438,7 +439,9 @@ namespace {
     storeTree(*this, fit, node, nodeIndex, bottomNodeIndex);
   }
   
-  void ::State::destroy() {
+  void ::State::destroy(const BARTFit& fit) {
+    for (size_t i = 0; i < numBottomNodes; ++i)
+      fit.model.endNodeModel->destroyScratch(fit, static_cast<char*>(scratches) + i * fit.model.endNodeModel->perNodeScratchSize);
     ::operator delete(scratches);
     
     delete [] variablesAvailable;

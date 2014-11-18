@@ -99,7 +99,7 @@ namespace dbarts {
       leftChild = NULL;
       p.rule.invalidate();
     } else {
-      fit.model.endNodeModel->destroyScratch(fit, *this);
+      fit.model.endNodeModel->destroyScratch(fit, getScratch());
     }
     clearObservationsInNode(fit, *this);
   }
@@ -150,7 +150,7 @@ namespace dbarts {
       Node::destroy(fit, node.leftChild);
       Node::destroy(fit, node.p.rightChild);
     } else {
-      if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, node);
+      if (fit.model.endNodeModel->destroyScratch != NULL) fit.model.endNodeModel->destroyScratch(fit, node.getScratch());
     }
     delete [] node.variablesAvailableForSplit; node.variablesAvailableForSplit = NULL;
   }
