@@ -5392,6 +5392,18 @@ fi
 
 done
 
+for ac_header in malloc.h
+do :
+  ac_fn_c_check_header_mongrel "$LINENO" "malloc.h" "ac_cv_header_malloc_h" "$ac_includes_default"
+if test "x$ac_cv_header_malloc_h" = xyes; then :
+  cat >>confdefs.h <<_ACEOF
+#define HAVE_MALLOC_H 1
+_ACEOF
+
+fi
+
+done
+
 
 # Checks for typedefs, structures, and compiler characteristics.
 ac_fn_c_find_intX_t "$LINENO" "64" "ac_cv_c_int64_t"
