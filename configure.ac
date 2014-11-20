@@ -8,6 +8,7 @@ AC_CONFIG_AUX_DIR([tools/build-aux])
 AC_CONFIG_HEADER([src/config.hpp])
 AC_CONFIG_HEADER([src/dbarts/config.hpp])
 AC_CONFIG_HEADER([src/external/config.h])
+AC_CONFIG_HEADER([src/rc/config.h])
 
 m4_include([tools/m4/m4_ax_pthread.m4])
 

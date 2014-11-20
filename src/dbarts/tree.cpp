@@ -27,6 +27,7 @@ using std::snprintf;
 #include <dbarts/data.hpp>
 #include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/scratch.hpp>
 #include <dbarts/state.hpp>
 #include "birthDeathRule.hpp"
@@ -156,6 +157,27 @@ namespace dbarts {
     }
   }
   
+  void Tree::setParametersFromFits(const BARTFit& fit, const double* treeFits)
+  {
+    NodeVector bottomNodes(getBottomVector());
+    size_t numBottomNodes = bottomNodes.size();
+    
+    void (*setParameters)(const BARTFit&, Node&, const double*) = fit.model.endNodeModel->setParameters;
+    
+    double parameter;
+    for (size_t i = 0; i < numBottomNodes; ++i) {
+      if (bottomNodes[i]->isTop()) {
+        parameter = treeFits[0];
+      } else if (bottomNodes[i]->getNumObservations() > 0) {
+        parameter = treeFits[bottomNodes[i]->getObservationIndices()[0]];
+      } else {
+        parameter = 0.0;
+      }
+      setParameters(fit, *bottomNodes[i], &parameter);
+    }
+  }
+    
+  
   /* double* Tree::recoverAveragesFromFits(const BARTFit&, const double* treeFits)
   {
     NodeVector bottomNodes(getBottomVector());
@@ -212,7 +234,7 @@ namespace dbarts {
 namespace {
   using namespace dbarts;
   
-  int writeNode(ext_stringWriter* writer, const Node& node) {
+  int writeTreeStructure(ext_stringWriter* writer, const Node& node) {
     if (node.isBottom()) return ext_swr_writeChar(writer, '.');
     
     int errorCode = 0;
@@ -221,13 +243,13 @@ namespace {
     if ((errorCode = ext_swr_write32BitInteger(writer, node.getRule().splitIndex)) != 0) return errorCode;
     if ((errorCode = ext_swr_writeChar(writer, ' ')) != 0) return errorCode;
     
-    if ((errorCode = writeNode(writer, *node.getLeftChild())) != 0) return errorCode;
-    errorCode = writeNode(writer, *node.getRightChild());
+    if ((errorCode = writeTreeStructure(writer, *node.getLeftChild())) != 0) return errorCode;
+    errorCode = writeTreeStructure(writer, *node.getRightChild());
     
     return errorCode;
   }
   
-  int readNode(const BARTFit& fit, Node&node, const char* string, size_t* bytesRead)
+  int readTreeStructure(const BARTFit& fit, Node&node, const char* string, size_t* bytesRead)
   {
     if (string[0] == '\0') return (*bytesRead = 0, 0);
     if (string[0] == '.') return (*bytesRead = 1, 0);
@@ -249,9 +271,6 @@ namespace {
     node.getRule().variableIndex = static_cast<int32_t>(std::strtol(buffer, NULL, 10));
     if (node.getRule().variableIndex == 0 && errno != 0) return errno;
     
-    // ext_throwError("unable to parse tree string: expected integer");
-    // ext_throwError("unable to parse tree string: %s", strerror(errno));
-    
     size_t bufferPos = 0;
     while (string[pos] != ' ' && bufferPos < INT_BUFFER_LENGTH) {
       buffer[bufferPos++] = string[pos++];
@@ -270,12 +289,12 @@ namespace {
     
     size_t childBytesRead;
     
-    int errorCode = readNode(fit, *node.getLeftChild(), string + pos, &childBytesRead);
+    int errorCode = readTreeStructure(fit, *node.getLeftChild(), string + pos, &childBytesRead);
     pos += childBytesRead;
     
     if (errorCode != 0) return (*bytesRead = pos, errorCode);
     
-    errorCode = readNode(fit, *node.getRightChild(), string + pos, &childBytesRead);
+    errorCode = readTreeStructure(fit, *node.getRightChild(), string + pos, &childBytesRead);
     pos += childBytesRead;
     
     *bytesRead = pos;
@@ -385,19 +404,20 @@ read_node_cleanup:
 }
 
 namespace dbarts {
-  int Tree::read(const BARTFit& fit, const char* string)
+  int Tree::readStructure(const BARTFit& fit, const char* string)
   {
     clear(fit);
     
     size_t pos = 0;
-    int errorCode = readNode(fit, *this, string, &pos);
+    int errorCode = readTreeStructure(fit, *this, string, &pos);
     
     if (errorCode != 0) return errorCode;
     
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
-    updateWithNewCovariates(fit, fit.state.sigma * fit.state.sigma);
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma; sigma_sq *= sigma_sq;
+    updateWithNewCovariates(fit, sigma_sq);
     
     return 0;
   }
@@ -413,9 +433,15 @@ namespace dbarts {
     if (!isBottom()) {
       updateVariablesAvailable(fit, *this, getRule().variableIndex);
     }
-    updateWithNewCovariates(fit, fit.state.sigma * fit.state.sigma);
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma; sigma_sq *= sigma_sq;
+    updateWithNewCovariates(fit, sigma_sq);
     
     return 0;
+  }
+  
+  int Tree::writeStructure(ext_stringWriter* writer) const
+  {
+    return writeTreeStructure(writer, *this);
   }
   
   int Tree::write(const BARTFit& fit, ext_binaryIO* bio) const
@@ -423,8 +449,35 @@ namespace dbarts {
     return writeNode(fit, *this, bio, getObservationIndices());
   }
   
-  int Tree::write(ext_stringWriter* writer) const
+  double* Tree::createParameterVector(const BARTFit& fit, size_t* parameterVectorLength) const
   {
-    return writeNode(writer, *this);
+    const NodeVector bottomNodes(getBottomVector());
+    
+    size_t numBottomNodes = bottomNodes.size();
+    size_t numParametersPerNode = fit.model.endNodeModel->numParameters;
+
+    double* (*getParameters)(const BARTFit&, const Node&) = fit.model.endNodeModel->getParameters;
+    
+    double* result = new double[numBottomNodes * numParametersPerNode];
+    for (size_t i = 0; i < numBottomNodes; ++i) {
+      std::memcpy(result + i * numParametersPerNode, getParameters(fit, *bottomNodes[i]), numParametersPerNode * sizeof(double));
+    }
+    
+    *parameterVectorLength = numBottomNodes * numParametersPerNode;
+    return result;
+  }
+  
+  void Tree::setParametersFromVector(const BARTFit& fit, const double* parameters)
+  {
+    NodeVector bottomNodes(getBottomVector());
+
+    size_t numBottomNodes = bottomNodes.size();
+    size_t numParametersPerNode = fit.model.endNodeModel->numParameters;
+
+    void (*setParameters)(const BARTFit&, Node&, const double*) = fit.model.endNodeModel->setParameters;
+    
+    for (size_t i = 0; i < numBottomNodes; ++i) {
+      setParameters(fit, *bottomNodes[i], parameters + i * numParametersPerNode);
+    }
   }
 }

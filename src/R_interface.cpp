@@ -16,9 +16,12 @@
 #include <dbarts/data.hpp>
 #include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/results.hpp>
 #include <dbarts/types.hpp>
 #include <dbarts/R_C_interface.hpp>
+
+#include <rc/rc.h>
 
 #include <external/alloca.h>
 #include <external/linearAlgebra.h>
@@ -28,6 +31,8 @@
 #ifdef THREAD_SAFE_UNLOAD
 #include <pthread.h>
 #endif
+
+#include "state.hpp"
 
 using std::size_t;
 
@@ -39,19 +44,8 @@ namespace {
   using namespace dbarts;
   
   void initializeControlFromExpression(Control& control, SEXP controlExpr);
-  // SEXP createControlExpressionFromFit(const BARTFit& fit);
   void initializeModelFromExpression(Model& model, SEXP modelExpr, const Control& control, const Data& data);
-  // SEXP createModelExpressionFromFit(const BARTFit& fit);
   void initializeDataFromExpression(Data& data, SEXP dataExpr);
-  // SEXP createDataExpressionFromFit(const BARTFit& fit);
-  
-  void initializeStateFromExpression(const BARTFit& fit, State& state, SEXP stateExpr);
-  SEXP createStateExpressionFromFit(const BARTFit& fit); // result has a protect count of 1
-  void storeStateExpressionFromFit(const BARTFit& fit, SEXP stateExpr);
-  
-  SEXP ALLOC_SLOT(SEXP obj, SEXP nm, SEXPTYPE type, int length);
-  SEXP SET_DIMS(SEXP obj, int numRows, int numCols);
-  bool isS4Null(SEXP expr);
   
   void deleteFit(BARTFit* fit);
   
@@ -104,204 +98,6 @@ extern "C" {
 namespace {
   using namespace dbarts;
   
-/*  static SEXP simulateContinuousUniform(SEXP nExpr)
-  {
-    size_t n = 0;
-    if (LENGTH(nExpr) > 0) n = (size_t) INTEGER(nExpr)[0];
-    
-    SEXP seedsExpr = findVarInFrame(R_GlobalEnv, R_SeedsSymbol);
-    if (seedsExpr == R_UnboundValue) GetRNGstate();
-    if (TYPEOF(seedsExpr) == PROMSXP) seedsExpr = eval(R_SeedsSymbol, R_GlobalEnv);
-    
-    // uint_least32_t seed0 = (uint_least32_t) INTEGER(seedsExpr)[0];
-    
-    // ext_rng_algorithm_t algorithmType = (ext_rng_algorithm_t) (seed0 % 100);
-    // ext_rng_standardNormal_t stdNormalType = (ext_rng_standardNormal_t) (seed0 / 100);
-    
-    ext_rng_userFunction uniformFunction;
-    uniformFunction.f.stateless = &unif_rand;
-    uniformFunction.state = NULL;
-    ext_rng* rng = ext_rng_create(EXT_RNG_ALGORITHM_USER_UNIFORM, &uniformFunction);
-        
-    SEXP resultExpr = PROTECT(allocVector(REALSXP, n));
-    double* result = REAL(resultExpr);
-    for (size_t i = 0; i < n; ++i) result[i] = ext_rng_simulateContinuousUniform(rng);
-    
-    ext_rng_destroy(rng);
-    
-    UNPROTECT(1);
-    return resultExpr;
-  }
-  
-  static SEXP simulateNormal(SEXP nExpr)
-  {
-    size_t n = 0;
-    if (LENGTH(nExpr) > 0) n = (size_t) INTEGER(nExpr)[0];
-    
-    SEXP seedsExpr = findVarInFrame(R_GlobalEnv, R_SeedsSymbol);
-    if (seedsExpr == R_UnboundValue) GetRNGstate();
-    if (TYPEOF(seedsExpr) == PROMSXP) seedsExpr = eval(R_SeedsSymbol, R_GlobalEnv);
-    
-    uint_least32_t seed0 = (uint_least32_t) INTEGER(seedsExpr)[0];
-    
-    // ext_rng_algorithm_t algorithmType = (ext_rng_algorithm_t) (seed0 % 100);
-    ext_rng_standardNormal_t stdNormalType = (ext_rng_standardNormal_t) (seed0 / 100);
-    
-    ext_rng_userFunction uniformFunction;
-    uniformFunction.f.stateless = &unif_rand;
-    uniformFunction.state = NULL;
-    ext_rng* rng = ext_rng_create(EXT_RNG_ALGORITHM_USER_UNIFORM, &uniformFunction);
-    ext_rng_setStandardNormalAlgorithm(rng, stdNormalType, NULL);
-    
-    SEXP resultExpr = PROTECT(allocVector(REALSXP, n));
-    double* result = REAL(resultExpr);
-    for (size_t i = 0; i < n; ++i) result[i] = ext_rng_simulateStandardNormal(rng);
-    
-    ext_rng_destroy(rng);
-    
-    UNPROTECT(1);
-    return resultExpr;
-  }
-  
-  static SEXP simulateExponential(SEXP nExpr)
-  {
-    size_t n = 0;
-    if (LENGTH(nExpr) > 0) n = (size_t) INTEGER(nExpr)[0];
-    
-    SEXP seedsExpr = findVarInFrame(R_GlobalEnv, R_SeedsSymbol);
-    if (seedsExpr == R_UnboundValue) GetRNGstate();
-    if (TYPEOF(seedsExpr) == PROMSXP) seedsExpr = eval(R_SeedsSymbol, R_GlobalEnv);
-    
-    uint_least32_t seed0 = (uint_least32_t) INTEGER(seedsExpr)[0];
-    
-    // ext_rng_algorithm_t algorithmType = (ext_rng_algorithm_t) (seed0 % 100);
-    ext_rng_standardNormal_t stdNormalType = (ext_rng_standardNormal_t) (seed0 / 100);
-    
-    ext_rng_userFunction uniformFunction;
-    uniformFunction.f.stateless = &unif_rand;
-    uniformFunction.state = NULL;
-    ext_rng* rng = ext_rng_create(EXT_RNG_ALGORITHM_USER_UNIFORM, &uniformFunction);
-    ext_rng_setStandardNormalAlgorithm(rng, stdNormalType, NULL);
-    
-    SEXP resultExpr = PROTECT(allocVector(REALSXP, n));
-    double* result = REAL(resultExpr);
-    for (size_t i = 0; i < n; ++i) result[i] = ext_rng_simulateExponential(rng, 1.0);
-    
-    ext_rng_destroy(rng);
-    
-    UNPROTECT(1);
-    return resultExpr;
-  }
-  
-  static ext_rng* createRNG()
-  {
-    SEXP seedsExpr = findVarInFrame(R_GlobalEnv, R_SeedsSymbol);
-    if (seedsExpr == R_UnboundValue) GetRNGstate();
-    if (TYPEOF(seedsExpr) == PROMSXP) seedsExpr = eval(R_SeedsSymbol, R_GlobalEnv);
-    
-    uint_least32_t seed0 = (uint_least32_t) INTEGER(seedsExpr)[0];
-    
-    ext_rng_algorithm_t algorithmType = (ext_rng_algorithm_t) (seed0 % 100);
-    ext_rng_standardNormal_t stdNormalType = (ext_rng_standardNormal_t) (seed0 / 100);
-    
-    void* state = (void*) (1 + INTEGER(seedsExpr));
-    switch (algorithmType) {
-      case EXT_RNG_ALGORITHM_KNUTH_TAOCP:
-      case EXT_RNG_ALGORITHM_KNUTH_TAOCP2:
-      {
-        ext_rng_knuthState* kt = (ext_rng_knuthState*) malloc(sizeof(ext_rng_knuthState));
-        memcpy(kt->state1, state, EXT_RNG_KNUTH_NUM_RANDOM * sizeof(uint_least32_t));
-        kt->info = EXT_RNG_KNUTH_NUM_RANDOM; // this is a static var which we cannot access
-        for (size_t i = 0; i < EXT_RNG_KNUTH_QUALITY; ++i) kt->state2[i] = 0; // also static
-        state = kt;
-      }
-      break;
-      case EXT_RNG_ALGORITHM_USER_UNIFORM:
-      {
-        ext_rng_userFunction* uniformFunction = (ext_rng_userFunction*) malloc(sizeof(ext_rng_userFunction));
-        uniformFunction->f.stateless = &unif_rand;
-        uniformFunction->state = NULL;
-        state = uniformFunction;
-      }
-      break;
-      default:
-      break;
-    }
-    
-    ext_rng* rng = ext_rng_create(algorithmType, state);
-    if (algorithmType == EXT_RNG_ALGORITHM_KNUTH_TAOCP || algorithmType == EXT_RNG_ALGORITHM_KNUTH_TAOCP2 || algorithmType == EXT_RNG_ALGORITHM_USER_UNIFORM) free(state);
-    if (rng == NULL) return NULL; 
-    
-    void* normalState = NULL;
-    switch (stdNormalType) {
-      case EXT_RNG_STANDARD_NORMAL_BOX_MULLER:
-      normalState = malloc(sizeof(double));
-      *((double*) normalState) = 0.0; // static var, again
-      break;
-      case EXT_RNG_STANDARD_NORMAL_USER_NORM:
-      {
-        ext_rng_userFunction* normalFunction = (ext_rng_userFunction*) malloc(sizeof(ext_rng_userFunction));
-        normalFunction->f.stateless = &norm_rand;
-        normalFunction->state = NULL;
-        normalState = normalFunction;
-      }
-      break;
-      default:
-      break;
-    }
-    
-    int errorCode = ext_rng_setStandardNormalAlgorithm(rng, stdNormalType, normalState);
-    if (stdNormalType == EXT_RNG_STANDARD_NORMAL_BOX_MULLER || stdNormalType == EXT_RNG_STANDARD_NORMAL_USER_NORM) free(normalState);
-    
-    if (errorCode != 0) {
-      ext_rng_destroy(rng);
-      return NULL;
-    }
-    
-    return rng;
-  }
-  
-  // takes type of generator from R and uses internal implementation
-  static SEXP simulateContinuousUniformInternally(SEXP nExpr)
-  {
-    size_t n = 0;
-    if (LENGTH(nExpr) > 0) n = (size_t) INTEGER(nExpr)[0];
-    
-    ext_rng* rng = createRNG();
-    
-    if (rng == NULL) return NULL_USER_OBJECT;
-    
-    SEXP resultExpr = PROTECT(allocVector(REALSXP, n));
-    double* result = REAL(resultExpr);
-    for (size_t i = 0; i < n; ++i) result[i] = ext_rng_simulateContinuousUniform(rng);
-    
-    ext_rng_destroy(rng);
-    
-    
-    UNPROTECT(1);
-    return resultExpr;
-  }
-  
-  static SEXP simulateNormalInternally(SEXP nExpr)
-   {
-    size_t n = 0;
-    if (LENGTH(nExpr) > 0) n = (size_t) INTEGER(nExpr)[0];
-    
-    ext_rng* rng = createRNG();
-    
-    if (rng == NULL) return NULL_USER_OBJECT;
-    
-    SEXP resultExpr = PROTECT(allocVector(REALSXP, n));
-    double* result = REAL(resultExpr);
-    for (size_t i = 0; i < n; ++i) result[i] = ext_rng_simulateStandardNormal(rng);
-    
-    ext_rng_destroy(rng);
-    
-    
-    UNPROTECT(1);
-    return resultExpr;
-  } */
-  
   SEXP saveToFile(SEXP fitExpr, SEXP fileName)
   {
     BARTFit* fit = static_cast<BARTFit*>(R_ExternalPtrAddr(fitExpr));
@@ -318,7 +114,7 @@ namespace {
       delete [] fit->data.maxNumCuts;
       delete [] fit->data.variableTypes;
       
-      delete fit->model.sigmaSqPrior;
+      delete fit->model.responseModel;
       delete fit->model.endNodeModel;
       delete fit->model.treePrior;
       
@@ -354,7 +150,7 @@ namespace {
     if (isReal(offsetExpr)) {
       offset = REAL(offsetExpr);
       if (static_cast<size_t>(length(offsetExpr)) != fit->data.numObservations) error("Length of new offset does not match y.");
-    } else if (!isNull(offsetExpr) && !isS4Null(offsetExpr)) {
+    } else if (!isNull(offsetExpr) && !rc_isS4Null(offsetExpr)) {
       error("offset must be of type real or NULL.");
     }
     
@@ -436,7 +232,7 @@ namespace {
     BARTFit* fit = static_cast<BARTFit*>(R_ExternalPtrAddr(fitExpr));
     if (fit == NULL) error("dbarts_setTestPredictor called on NULL external pointer.");
     
-    if (isNull(x_test) || isS4Null(x_test)) {
+    if (isNull(x_test) || rc_isS4Null(x_test)) {
       fit->setTestPredictor(NULL, 0);
     
       return NULL_USER_OBJECT;
@@ -474,7 +270,7 @@ namespace {
     BARTFit* fit = static_cast<BARTFit*>(R_ExternalPtrAddr(fitExpr));
     if (fit == NULL) error("dbarts_setTestPredictorAndOffset called on NULL external pointer.");
     
-    if (isNull(x_test) || isS4Null(x_test)) {
+    if (isNull(x_test) || rc_isS4Null(x_test)) {
       fit->setTestPredictor(NULL, 0);
     
       return NULL_USER_OBJECT;
@@ -816,12 +612,6 @@ namespace {
     // experimental
     DEF_FUNC("dbarts_saveToFile", saveToFile, 2),
     DEF_FUNC("dbarts_loadFromFile", loadFromFile, 1),
-    // below: testing
-//    DEF_FUNC("dbarts_runif", simulateContinuousUniform, 1),
-//    DEF_FUNC("dbarts_runif", simulateContinuousUniformInternally, 1),
-//    DEF_FUNC("dbarts_rnorm", simulateNormal, 1),
-//    DEF_FUNC("dbarts_rnorm", simulateNormalInternally, 1),
-//    DEF_FUNC("dbarts_rexp", simulateExponential, 1),
     { NULL, NULL, 0 }
   };
 
@@ -847,11 +637,11 @@ namespace {
     DEF_FUNC("initializeMeanNormalModelFromOptions", dbarts_initializeMeanNormalModelFromOptions),
     DEF_FUNC("invalidateMeanNormalModel", dbarts_invalidateMeanNormalModel),
     
-    DEF_FUNC("createChiSquaredPrior", dbarts_createChiSquaredPrior),
-    DEF_FUNC("createChiSquaredPriorFromOptions", dbarts_createChiSquaredPriorFromOptions),
-    DEF_FUNC("destroyChiSquaredPrior", dbarts_destroyChiSquaredPrior),
-    DEF_FUNC("initializeChiSquaredPriorFromOptions", dbarts_initializeChiSquaredPriorFromOptions),
-    DEF_FUNC("invalidateChiSquaredPrior", dbarts_invalidateChiSquaredPrior),
+    //DEF_FUNC("createChiSquaredPrior", dbarts_createChiSquaredPrior),
+    //DEF_FUNC("createChiSquaredPriorFromOptions", dbarts_createChiSquaredPriorFromOptions),
+    //DEF_FUNC("destroyChiSquaredPrior", dbarts_destroyChiSquaredPrior),
+    //DEF_FUNC("initializeChiSquaredPriorFromOptions", dbarts_initializeChiSquaredPriorFromOptions),
+    //DEF_FUNC("invalidateChiSquaredPrior", dbarts_invalidateChiSquaredPrior),
 
     DEF_FUNC("createFit", dbarts_createFit),
     DEF_FUNC("initializeFit", dbarts_initializeFit),
@@ -899,37 +689,6 @@ extern "C" {
 
 namespace {
   using namespace dbarts;
-  
-  SEXP ALLOC_SLOT(SEXP obj, SEXP nm, SEXPTYPE type, int length)
-  {
-    SEXP val = allocVector(type, length);
-    
-    SET_SLOT(obj, nm, val);
-    return val;
-  }
-  
-  SEXP SET_DIMS(SEXP obj, int numRows, int numCols)
-  {
-    SEXP dimsExp = NEW_INTEGER(2);
-    int* dims = INTEGER(dimsExp);
-    dims[0] = numRows;
-    dims[1] = numCols;
-    
-    SET_ATTR(obj, R_DimSymbol, dimsExp);
-    
-    return obj;
-  }
-  
-  bool isS4Null(SEXP expr)
-  {
-    if (!isSymbol(expr)) return false;
-    
-    const char* symbolName = CHAR(PRINTNAME(expr));
-    
-    if (strncmp(symbolName, "\1NULL\1", 6) == 0) return true;
-    
-    return false;
-  }
   
   void initializeControlFromExpression(Control& control, SEXP controlExpr)
   {
@@ -1107,11 +866,11 @@ namespace {
     d_temp = REAL(slotExpr)[0];
     if (ISNAN(d_temp)) error("k must be a real number.");
     if (d_temp <= 0.0) error("k must be positive.");
-    // model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
-    double* precisions = new double[data.numPredictors + 1];
+    model.endNodeModel = EndNode::createMeanNormalModel(control, d_temp);
+    /* double* precisions = new double[data.numPredictors + 1];
     precisions[0] = 1.0 / (10.0 * 10.0);
     for (size_t i = 1; i <= data.numPredictors; ++i) precisions[i] = 1.0 / (2.5 * 2.5);
-    model.endNodeModel = EndNode::createLinearRegressionNormalModel(data, precisions);
+    model.endNodeModel = EndNode::createLinearRegressionNormalModel(data, precisions); */
     
     
     priorExpr = GET_ATTR(modelExpr, install("resid.prior"));
@@ -1129,7 +888,7 @@ namespace {
     d_temp = REAL(slotExpr)[0];
     if (ISNAN(d_temp)) error("sigma prior quantile must be a real number.");
     if (d_temp <= 0.0 || d_temp >= 1.0) error("sigma prior quantile must be in (0, 1).");
-    model.sigmaSqPrior = new ChiSquaredPrior(sigmaPriorDf, d_temp);
+    model.responseModel = Response::createNormalChiSquaredModel(data, sigmaPriorDf, d_temp);
   }
 
   void initializeDataFromExpression(Data& data, SEXP dataExpr)
@@ -1159,7 +918,7 @@ namespace {
     data.variableTypes = variableTypes;
     
     slotExpr = GET_ATTR(dataExpr, install("x.test"));
-    if (isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
+    if (rc_isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
       data.X_test = NULL;
       data.numTestObservations = 0;
     } else {
@@ -1172,7 +931,7 @@ namespace {
     }
     
     slotExpr = GET_ATTR(dataExpr, install("weights"));
-    if (isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
+    if (rc_isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
       data.weights = NULL;
     } else {
       if (!isReal(slotExpr)) error("weights must be of type real.");
@@ -1181,7 +940,7 @@ namespace {
     }
     
     slotExpr = GET_ATTR(dataExpr, install("offset"));
-    if (isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
+    if (rc_isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
       data.offset = NULL;
     } else {
       if (!isReal(slotExpr)) error("offset must be of type real.");
@@ -1190,7 +949,7 @@ namespace {
     }
     
     slotExpr = GET_ATTR(dataExpr, install("offset.test"));
-    if (isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
+    if (rc_isS4Null(slotExpr) || isNull(slotExpr) || length(slotExpr) == 0) {
       data.testOffset = NULL;
     } else {
       if (!isReal(slotExpr)) error("Test offset must be of type real.");
@@ -1216,120 +975,6 @@ namespace {
     data.maxNumCuts = maxNumCuts;
   }
   
-  SEXP createStateExpressionFromFit(const BARTFit& fit)
-  {
-    const Control& control(fit.control);
-    const Data& data(fit.data);
-    const State& state(fit.state);
-    
-    SEXP result = PROTECT(NEW_OBJECT(MAKE_CLASS("dbartsState")));
-    
-    SEXP slotExpr = ALLOC_SLOT(result, install("fit.tree"), REALSXP, static_cast<int>(data.numObservations * control.numTrees));
-    SET_DIMS(slotExpr, static_cast<int>(data.numObservations), static_cast<int>(control.numTrees));
-    std::memcpy(REAL(slotExpr), state.treeFits, data.numObservations * control.numTrees * sizeof(double));
-    
-    slotExpr = ALLOC_SLOT(result, install("fit.total"), REALSXP, static_cast<int>(data.numObservations));
-    std::memcpy(REAL(slotExpr), state.totalFits, data.numObservations * sizeof(double));
-    
-    if (data.numTestObservations == 0) {
-      SET_SLOT(result, install("fit.test"), NULL_USER_OBJECT);
-    } else {
-      slotExpr = ALLOC_SLOT(result, install("fit.test"), REALSXP, static_cast<int>(data.numTestObservations));
-      std::memcpy(REAL(slotExpr), state.totalTestFits, data.numTestObservations * sizeof(double));
-    }
-    
-    slotExpr = ALLOC_SLOT(result, install("sigma"), REALSXP, 1);
-    REAL(slotExpr)[0] = state.sigma;
-    
-    slotExpr = ALLOC_SLOT(result, install("runningTime"), REALSXP, 1);
-    REAL(slotExpr)[0] = state.runningTime;
-    
-    slotExpr = ALLOC_SLOT(result, install("trees"), STRSXP, static_cast<int>(control.numTrees));
-
-    const char** treeStrings = const_cast<const char**>(state.createTreeStrings(fit));
-    for (size_t i = 0; i < control.numTrees; ++i) {
-      SET_STRING_ELT(slotExpr, static_cast<int>(i), CREATE_STRING_VECTOR(treeStrings[i]));
-      std::free(const_cast<char*>(treeStrings[i]));
-    }
-    delete [] treeStrings;
-    
-    return result;
-  }
-  
-  void storeStateExpressionFromFit(const BARTFit& fit, SEXP stateExpr)
-  {
-    const Control& control(fit.control);
-    const Data& data(fit.data);
-    const State& state(fit.state);
-    
-    SEXP slotExpr = GET_ATTR(stateExpr, install("fit.tree"));
-    SEXP dimsExpr = GET_DIM(slotExpr);
-    if (GET_LENGTH(dimsExpr) != 2) error("Dimensions of state@fit.tree indicate that it is not a matrix.");
-    int* dims = INTEGER(dimsExpr);
-    if (static_cast<size_t>(dims[0]) != data.numObservations || static_cast<size_t>(dims[1]) != control.numTrees) error("Dimensions of state@fit.tree do not match object.");
-    std::memcpy(REAL(slotExpr), state.treeFits, data.numObservations * control.numTrees * sizeof(double));
-    
-    slotExpr = GET_ATTR(stateExpr, install("fit.total"));
-    if (static_cast<size_t>(GET_LENGTH(slotExpr)) != data.numObservations) error("Length of state@fit.total does not match object.");
-    std::memcpy(REAL(slotExpr), state.totalFits, data.numObservations * sizeof(double));
-    
-    if (data.numTestObservations != 0) {
-      slotExpr = GET_ATTR(stateExpr, install("fit.test"));
-      if (static_cast<size_t>(GET_LENGTH(slotExpr)) != data.numTestObservations) error("Length of state@fit.test does not match object.");
-      std::memcpy(REAL(slotExpr), state.totalTestFits, data.numTestObservations * sizeof(double));
-    }
-    
-    slotExpr = GET_ATTR(stateExpr, install("sigma"));
-    if (GET_LENGTH(slotExpr) != 1) error("Length of state@sigma does not match object.");
-    REAL(slotExpr)[0] = state.sigma;
-    
-    slotExpr = GET_ATTR(stateExpr, install("runningTime"));
-    if (GET_LENGTH(slotExpr) != 1) error("Length of state@runningTime does not match object.");
-    REAL(slotExpr)[0] = state.runningTime;
-    
-    slotExpr = GET_ATTR(stateExpr, install("trees"));
-    if (static_cast<size_t>(GET_LENGTH(slotExpr)) != control.numTrees) error("Length of state@trees does not match object.");
-    
-    const char** treeStrings = const_cast<const char**>(state.createTreeStrings(fit));
-    for (size_t i = 0; i < control.numTrees; ++i) {
-      SET_STRING_ELT(slotExpr, static_cast<int>(i), CREATE_STRING_VECTOR(treeStrings[i]));
-      std::free(const_cast<char*>(treeStrings[i]));
-    }
-    delete [] treeStrings;
-  }
-  
-  void initializeStateFromExpression(const BARTFit& fit, State& state, SEXP stateExpr)
-  {
-    const Control& control(fit.control);
-    const Data& data(fit.data);
-    
-    SEXP slotExpr = GET_ATTR(stateExpr, install("fit.tree"));
-    std::memcpy(state.treeFits, const_cast<const double*>(REAL(slotExpr)), data.numObservations * control.numTrees * sizeof(double));
-    
-    slotExpr = GET_ATTR(stateExpr, install("fit.total"));
-    std::memcpy(state.totalFits, const_cast<const double*>(REAL(slotExpr)), data.numObservations * sizeof(double));
-    
-    if (data.numTestObservations != 0) {
-      slotExpr = GET_ATTR(stateExpr, install("fit.test"));
-      std::memcpy(state.totalTestFits, const_cast<const double*>(REAL(slotExpr)), data.numTestObservations * sizeof(double));
-    }
-    
-    slotExpr = GET_ATTR(stateExpr, install("sigma"));
-    state.sigma = REAL(slotExpr)[0];
-    
-    slotExpr = GET_ATTR(stateExpr, install("runningTime"));
-    state.runningTime = REAL(slotExpr)[0];
-    
-    slotExpr = GET_ATTR(stateExpr, install("trees"));
-    const char** treeStrings = ext_stackAllocate(control.numTrees, const char*);
-    for (size_t i = 0; i < control.numTrees; ++i) {
-      treeStrings[i] = CHAR(STRING_ELT(slotExpr, static_cast<int>(i)));
-    }
-    state.recreateTreesFromStrings(fit, treeStrings);
-    
-    ext_stackFree(treeStrings);
-  }
-  
   void deleteFit(BARTFit* fit) {
 #ifdef THREAD_SAFE_UNLOAD
     Rprintf("deleting   %p\n", fit);
@@ -1338,19 +983,22 @@ namespace {
     
     ext_rng_destroy(fit->control.rng);
     
-    EndNode::Model* endNodeModel        = fit->model.endNodeModel;
-    TreePrior* treePrior                = fit->model.treePrior;
-    ResidualVariancePrior* sigmaSqPrior = fit->model.sigmaSqPrior;
+    EndNode::Model* endNodeModel   = fit->model.endNodeModel;
+    TreePrior* treePrior           = fit->model.treePrior;
+    Response::Model* responseModel = fit->model.responseModel;
     
     delete [] fit->data.variableTypes;
     delete [] fit->data.maxNumCuts;
     
     delete fit;
-   
-    delete [] static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel)->precisions; 
-    destroyLinearRegressionNormalModel(static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel));
-    // delete endNodeModel;
+    
+    if (std::strncmp(endNodeModel->name, EndNode::linearRegressionNormalName, 4) == 0) {
+      delete [] static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel)->precisions; 
+      destroyLinearRegressionNormalModel(static_cast<EndNode::LinearRegressionNormalModel*>(endNodeModel));
+    } else {
+      delete endNodeModel;
+    }
     delete treePrior;
-    delete sigmaSqPrior;
+    delete responseModel;
   }
 }

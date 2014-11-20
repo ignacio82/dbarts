@@ -7,6 +7,7 @@
 #include <dbarts/bartFit.hpp>
 #include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/results.hpp>
 
 #include <external/stats.h>
@@ -100,23 +101,6 @@ extern "C" {
     prior->~CGMPrior();
   }
   
-  /* NormalPrior* dbarts_createNormalPrior() {
-    return new NormalPrior;
-  }
-  NormalPrior* dbarts_createNormalPriorFromOptions(const Control* control, double k) {
-    return new NormalPrior(*control, k);
-  }
-  void dbarts_destroyNormalPrior(NormalPrior* prior) {
-    delete prior;
-  }
-  void dbarts_initializeNormalPriorFromOptions(NormalPrior* prior, const Control* control, double k)
-  {
-    new (prior) NormalPrior(*control, k);
-  }
-  void dbarts_invalidateNormalPrior(NormalPrior* prior) {
-    prior->~NormalPrior();
-  } */
-  
   dbarts::EndNode::MeanNormalModel* dbarts_createMeanNormalModel() {
     return EndNode::createMeanNormalModel();
   }
@@ -137,7 +121,7 @@ extern "C" {
     typedef EndNode::MeanNormalModel ThingToDestruct;
     model->~ThingToDestruct();
   }
-  
+  /*
   ChiSquaredPrior* dbarts_createChiSquaredPrior() {
     return new ChiSquaredPrior;
   }
@@ -153,5 +137,5 @@ extern "C" {
   }
   void dbarts_invalidateChiSquaredPrior(ChiSquaredPrior* prior) {
     prior->~ChiSquaredPrior();
-  }
+  } */
 }

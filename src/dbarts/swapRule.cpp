@@ -12,6 +12,7 @@
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/scratch.hpp>
 #include <dbarts/types.hpp>
 #include "functions.hpp"
@@ -63,7 +64,9 @@ namespace dbarts {
     NodeVector swappableNodes(tree.getSwappableVector());
     size_t numSwappableNodes = swappableNodes.size();
     
-    double sigma_sq = fit.state.sigma * fit.state.sigma;
+    // double sigma_sq = fit.state.sigma * fit.state.sigma;
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma;
+    sigma_sq *= sigma_sq;
     
     //if there are no swappable rule back out
     if (numSwappableNodes == 0) return -1.0;

@@ -14,12 +14,15 @@ namespace dbarts {
     double* totalFits;
     double* totalTestFits; // numTestObs x 1
 
-    double sigma;
-    
     double runningTime;
     
-    const char* const* createTreeStrings(const BARTFit& fit) const;
-    void recreateTreesFromStrings(const BARTFit& fit, const char* const* treeStrings);
+    char** createTreeStructuresStrings(const BARTFit& fit) const;
+    void recreateTreeStructuresFromStrings(const BARTFit& fit, const char** treeStructuresStrings);
+    
+    double** createTreeParametersVectors(const BARTFit& fit, size_t** treeParameterLengths) const;
+    void setTreeParametersFromVectors(const BARTFit& fit, double** treeParameters);
+    
+    void setTreeParametersFromFits(const BARTFit& fit);
   };
 } // namespace dbarts
 

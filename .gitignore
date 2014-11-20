@@ -11,4 +11,5 @@ autom4te.cache
 src/config.hpp
 src/dbarts/config.hpp
 src/external/config.h
+src/rc/config.h
 src/momentsTest

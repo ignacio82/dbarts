@@ -51,12 +51,21 @@ namespace dbarts {
       NONE = 0x0,
       CONDITIONALLY_INTEGRABLE = 0x1, // should use log-integrated likelihood functions; otherwise log-prior
       PREDICTION_IS_CONSTANT   = 0x2, // uses dirty tricks to avoid a lot of unnecessary calls
-      INVALID = 0x2
+      INVALID = 0x4
     };
+
+    const char* const meanNormalName = "MnNl";
+    const char* const linearRegressionNormalName = "LnRN";
     
     struct Model {
       std::size_t perNodeScratchSize;
       std::uint32_t info;
+      char name[4];
+      std::size_t numParameters;
+
+      void (*print)(const BARTFit& fit);
+      double* (*getParameters)(const BARTFit& fit, const Node& node);
+      void (*setParameters)(const BARTFit& fit, Node& node, const double* parameters);
       
       double (*computeLogPrior)(const BARTFit& fit, const Node& node);
       double (*computeLogIntegratedLikelihood)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
@@ -65,7 +74,6 @@ namespace dbarts {
       
       double (*getPrediction)(const BARTFit& fit, const Node& node, const double* Xt); // at given Xt
       void (*getPredictions)(const BARTFit& fit, const Node& node, double* y_hat);     // at all of training, i.e. fit.scratch.Xt
-      // void (*getPredictionsForIndices)(const BARTFit& fit, const Node& node, const double* y, const std::size_t* indices, double* y_hat);
       
       void (*createScratch)(const BARTFit& fit, Node& node);
       void (*destroyScratch)(const BARTFit& fit, void* scratch);
@@ -73,7 +81,6 @@ namespace dbarts {
       void (*restoreScratch)(const BARTFit& fit, void* source, Node& target); // destroys source as well
       
       void (*printScratch)(const BARTFit& fit, const Node &node);
-      
       
       void (*updateScratchWithMemberships)(const BARTFit& fit, const Node& node, double residualVariance);
       void (*prepareScratchForLikelihoodAndPosteriorCalculations)(const BARTFit& fit, const Node& node, const double* y, double residualVariance);
@@ -89,7 +96,8 @@ namespace dbarts {
     struct MeanNormalModel : Model {
       double precision;
     };
-    
+
+#define DBARTS_END_NODE_MEAN_NORMAL_DEFAULT_K 2.0
     MeanNormalModel* createMeanNormalModel();
     void initializeMeanNormalModel(MeanNormalModel& model);
     MeanNormalModel* createMeanNormalModel(const Control& control, double k);
@@ -108,3 +116,4 @@ namespace dbarts {
 }
 
 #endif // DBARTS_END_NODE_MODEL_HPP
+

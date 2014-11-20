@@ -14,6 +14,7 @@
 #include <dbarts/data.hpp>
 #include <dbarts/endNodeModel.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/state.hpp>
 
 #include "tree.hpp"
@@ -214,6 +215,7 @@ read_data_cleanup:
     if ((errorCode = ext_bio_writeDouble(bio, model.birthProbability)) != 0) goto write_model_cleanup;
     
     // this needs some seeerious work
+    /* 
     if ((errorCode = ext_bio_writeNChars(bio, "cgm ", 4)) != 0) goto write_model_cleanup;
     if ((errorCode = ext_bio_writeDouble(bio, static_cast<CGMPrior*>(model.treePrior)->base)) != 0) goto write_model_cleanup;
     if ((errorCode = ext_bio_writeDouble(bio, static_cast<CGMPrior*>(model.treePrior)->power)) != 0) goto write_model_cleanup;
@@ -223,8 +225,9 @@ read_data_cleanup:
     if ((errorCode = ext_bio_writeDouble(bio, static_cast<EndNode::MeanNormalModel*>(model.endNodeModel)->precision)) != 0) goto write_model_cleanup;
     
     if ((errorCode = ext_bio_writeNChars(bio, "chsq", 4)) != 0) goto write_model_cleanup;
-    if ((errorCode = ext_bio_writeDouble(bio, static_cast<ChiSquaredPrior*>(model.sigmaSqPrior)->degreesOfFreedom)) != 0) goto write_model_cleanup;
-    if ((errorCode = ext_bio_writeDouble(bio, static_cast<ChiSquaredPrior*>(model.sigmaSqPrior)->scale)) != 0) goto write_model_cleanup;
+    if ((errorCode = ext_bio_writeDouble(bio, static_cast<Response::NormalChiSquaredModel*>(model.responseModel)->degreesOfFreedom)) != 0) goto write_model_cleanup;
+    if ((errorCode = ext_bio_writeDouble(bio, static_cast<Response::NormalChiSquaredModel*>(model.responseModel)->scale)) != 0) goto write_model_cleanup;
+    */
     
 write_model_cleanup:
     if (errorCode != 0) ext_issueWarning("error writing model object: %s", std::strerror(errorCode));
@@ -235,7 +238,7 @@ write_model_cleanup:
   bool readModel(Model& model, ext_binaryIO* bio)
   {
     int errorCode = 0;
-    char priorName[4];
+    // char priorName[4];
     
     if ((errorCode = ext_bio_readDouble(bio, &model.birthOrDeathProbability)) != 0) goto read_model_cleanup;
     if ((errorCode = ext_bio_readDouble(bio, &model.swapProbability)) != 0) goto read_model_cleanup;
@@ -243,6 +246,7 @@ write_model_cleanup:
     
     if ((errorCode = ext_bio_readDouble(bio, &model.birthProbability)) != 0) goto read_model_cleanup;
     
+    /*
     if ((errorCode = ext_bio_readNChars(bio, priorName, 4)) != 0) goto read_model_cleanup;
     if (strncmp(priorName, "cgm ", 4) != 0) { errorCode = EILSEQ; goto read_model_cleanup; }
     
@@ -261,14 +265,15 @@ write_model_cleanup:
     if ((errorCode = ext_bio_readNChars(bio, priorName, 4)) != 0) goto read_model_cleanup;
     if (strncmp(priorName, "chsq", 4) != 0) { errorCode = EILSEQ; goto read_model_cleanup; }
     
-    model.sigmaSqPrior = new ChiSquaredPrior;
-    if ((errorCode = ext_bio_readDouble(bio, &static_cast<ChiSquaredPrior*>(model.sigmaSqPrior)->degreesOfFreedom)) != 0) goto read_model_cleanup;
-    if ((errorCode = ext_bio_readDouble(bio, &static_cast<ChiSquaredPrior*>(model.sigmaSqPrior)->scale)) != 0) goto read_model_cleanup;
+    model.responseModel = new Response::NormalChiSquaredModel;
+    if ((errorCode = ext_bio_readDouble(bio, &static_cast<Response::NormalChiSquaredModel*>(model.responseModel)->degreesOfFreedom)) != 0) goto read_model_cleanup;
+    if ((errorCode = ext_bio_readDouble(bio, &static_cast<Response::NormalChiSquaredModel*>(model.responseModel)->scale)) != 0) goto read_model_cleanup;
+    */
     
 read_model_cleanup:
     
     if (errorCode != 0) {
-      delete model.sigmaSqPrior;
+      delete model.responseModel;
       delete model.endNodeModel;
       delete model.treePrior;
       
@@ -299,7 +304,6 @@ namespace dbarts {
         
     for (size_t i = 0; i < control.numTrees; ++i) {
       if ((errorCode = TREE_AT(state.trees, i, fit.scratch.nodeSize)->write(fit, bio)) != 0) goto write_state_cleanup;
-      // if ((errorCode = writeNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto write_state_cleanup;
     }
     
     if ((errorCode = ext_bio_writeNDoubles(bio, state.treeFits, data.numObservations * control.numTrees)) != 0) goto write_state_cleanup;
@@ -307,7 +311,7 @@ namespace dbarts {
     if (data.numTestObservations > 0 &&
       (errorCode = ext_bio_writeNDoubles(bio, state.totalTestFits, data.numTestObservations)) != 0) goto write_state_cleanup;
     
-    if ((errorCode = ext_bio_writeDouble(bio, state.sigma)) != 0) goto write_state_cleanup;
+    // if ((errorCode = ext_bio_writeDouble(bio, state.sigma)) != 0) goto write_state_cleanup;
     if ((errorCode = ext_bio_writeDouble(bio, state.runningTime)) != 0) goto write_state_cleanup;
     
 write_state_cleanup:
@@ -327,10 +331,7 @@ write_state_cleanup:
     if ((errorCode = ext_bio_readNSizeTypes(bio, state.treeIndices, data.numObservations * control.numTrees)) != 0) goto read_state_cleanup;
     
     for (size_t i = 0; i < control.numTrees; ++i) {
-      
-      // NODE_AT(state.trees, i, fit.scratch.nodeSize)->observationIndices = state.treeIndices + i * data.numObservations;
       if ((errorCode = TREE_AT(state.trees, i, fit.scratch.nodeSize)->read(fit, bio)) != 0) goto read_state_cleanup;
-      // if ((errorCode = readNode(fit, *NODE_AT(state.trees, i, fit.scratch.nodeSize), bio, state.treeIndices + i * data.numObservations)) != 0) goto read_state_cleanup;
     }
     
     if ((errorCode = ext_bio_readNDoubles(bio, state.treeFits, data.numObservations * control.numTrees)) != 0) goto read_state_cleanup;
@@ -340,7 +341,7 @@ write_state_cleanup:
       if ((errorCode = ext_bio_readNDoubles(bio, state.totalTestFits, data.numTestObservations)) != 0) goto read_state_cleanup;
     }
     
-    if ((errorCode = ext_bio_readDouble(bio, &state.sigma)) != 0) goto read_state_cleanup;
+    // if ((errorCode = ext_bio_readDouble(bio, &state.sigma)) != 0) goto read_state_cleanup;
     if ((errorCode = ext_bio_readDouble(bio, &state.runningTime)) != 0) goto read_state_cleanup;
     
 read_state_cleanup:

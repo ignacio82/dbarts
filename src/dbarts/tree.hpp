@@ -44,11 +44,16 @@ namespace dbarts {
     
     const char* createString() const;
     
-    int read(const BARTFit& fit, const char* string);
+    int readStructure(const BARTFit& fit, const char* string);
     int read(const BARTFit& fit, ext_binaryIO* bio);
     
+    int writeStructure(ext_stringWriter* writer) const;
     int write(const BARTFit& fit, ext_binaryIO* bio) const;
-    int write(ext_stringWriter* writer) const;
+    
+    double* createParameterVector(const BARTFit& fit, size_t* parameterVectorLength) const;
+    void setParametersFromVector(const BARTFit& fit, const double* parameters);
+    
+    void setParametersFromFits(const BARTFit& fit, const double* treeFits);
     
     bool isValid() const;
   };

@@ -14,6 +14,7 @@
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/scratch.hpp>
 #include <dbarts/types.hpp>
 #include "functions.hpp"
@@ -74,7 +75,9 @@ namespace dbarts {
     NodeVector notBottomNodes(tree.getNotBottomVector());
     size_t numNotBottomNodes = notBottomNodes.size();
     
-    double sigma_sq = fit.state.sigma * fit.state.sigma;
+    // double sigma_sq = fit.state.sigma * fit.state.sigma;
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma;
+    sigma_sq *= sigma_sq;
     
     // get list of nodes with rule = nodes which are not bottom
     if (numNotBottomNodes == 0) return -1.0;

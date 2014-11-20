@@ -21,11 +21,12 @@
 
 #include <external/alloca.h>
 #include <external/io.h>
+#include <external/linearAlgebra.h>
 #include <external/random.h>
 #include <external/stats.h>
-#include <external/stats_mt.h>
-#include <external/linearAlgebra.h>
+#include <external/thread.h>
 
+#include <dbarts/responseModel.hpp>
 #include <dbarts/results.hpp>
 #include "tree.hpp"
 
@@ -70,39 +71,45 @@ namespace {
 #endif
 }
 
+#define CHEAT_SIGMA(_M_) static_cast<Response::NormalChiSquaredModel*>(_M_)->sigma
+
 namespace dbarts {
   
   void BARTFit::setResponse(const double* newY) {
     if (!control.responseIsBinary) {
-      double sigmaUnscaled = state.sigma * scratch.dataScale.range;
-      double priorUnscaled = model.sigmaSqPrior->getScale() * scratch.dataScale.range * scratch.dataScale.range;
+      double sigmaUnscaled = CHEAT_SIGMA(model.responseModel) * scratch.dataScale.range;
+      double priorUnscaled;
+      if (model.responseModel->info & Response::HAS_SCALE_PARAMETER)
+        priorUnscaled = model.responseModel->getScale(*this) * scratch.dataScale.range * scratch.dataScale.range;
       
       data.y = newY;
       
       rescaleResponse(*this);
       
-      state.sigma = sigmaUnscaled / scratch.dataScale.range;
-      model.sigmaSqPrior->setScale(priorUnscaled / (scratch.dataScale.range * scratch.dataScale.range));
+      CHEAT_SIGMA(model.responseModel) = sigmaUnscaled / scratch.dataScale.range;
+      if (model.responseModel->info & Response::HAS_SCALE_PARAMETER)
+        model.responseModel->setScale(*this, priorUnscaled / (scratch.dataScale.range * scratch.dataScale.range));
     } else {
       data.y = newY;
       
       sampleProbitLatentVariables(*this, const_cast<const double*>(state.totalFits), const_cast<double*>(scratch.yRescaled));
     }
-    
-    // resampleTreeFits(*this);
   }
   
   void BARTFit::setOffset(const double* newOffset) {
     if (!control.responseIsBinary) {
-      double sigmaUnscaled = state.sigma * scratch.dataScale.range;
-      double priorUnscaled = model.sigmaSqPrior->getScale() * scratch.dataScale.range * scratch.dataScale.range;
+      double sigmaUnscaled = CHEAT_SIGMA(model.responseModel) * scratch.dataScale.range;
+      double priorUnscaled;
+      if (model.responseModel->info & Response::HAS_SCALE_PARAMETER)
+        priorUnscaled = model.responseModel->getScale(*this) * scratch.dataScale.range * scratch.dataScale.range;
       
       data.offset = newOffset;
       
       rescaleResponse(*this);
       
-      state.sigma = sigmaUnscaled / scratch.dataScale.range;
-      model.sigmaSqPrior->setScale(priorUnscaled / (scratch.dataScale.range * scratch.dataScale.range));
+      CHEAT_SIGMA(model.responseModel) = sigmaUnscaled / scratch.dataScale.range;
+      if (model.responseModel->info & Response::HAS_SCALE_PARAMETER)
+        model.responseModel->setScale(*this, priorUnscaled / (scratch.dataScale.range * scratch.dataScale.range));
     } else {
       data.offset = newOffset;
       
@@ -128,7 +135,7 @@ namespace dbarts {
       }
     }
     
-    double sigma_sq = state.sigma * state.sigma;
+    double sigma_sq = CHEAT_SIGMA(model.responseModel) * CHEAT_SIGMA(model.responseModel);
     // double** nodePosteriorPredictions = new double*[control.numTrees];
     // for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
     
@@ -193,7 +200,7 @@ namespace dbarts {
     
     // double** nodePosteriorPredictions = new double*[control.numTrees];
     // for (size_t i = 0; i < control.numTrees; ++i) nodePosteriorPredictions[i] = NULL;
-    double sigma_sq = state.sigma * state.sigma;
+    double sigma_sq = CHEAT_SIGMA(model.responseModel) * CHEAT_SIGMA(model.responseModel);
     
     size_t treeNum;
     for (treeNum = 0; treeNum < control.numTrees && allTreesAreValid == true; ++treeNum) {
@@ -363,10 +370,6 @@ namespace dbarts {
                                           data.numTestObservations, numSamples == 0 ? 1 : numSamples); // ensure at least one sample for state's sake
     Results& results(*resultsPointer);
     
-    double numEffectiveObservations = 
-      data.weights == NULL ? static_cast<double>(data.numObservations) : ext_sumVectorElements(data.weights, data.numObservations);
-    
-    
     double* currFits = new double[data.numObservations];
     double* currTestFits = NULL;
     if (data.numTestObservations > 0) currTestFits = new double[data.numTestObservations];
@@ -399,7 +402,7 @@ namespace dbarts {
       
       if (!isThinningIteration && data.numTestObservations > 0) ext_setVectorToConstant(state.totalTestFits, data.numTestObservations, 0.0);
       
-      double sigma_sq = state.sigma * state.sigma;
+      double sigma_sq = CHEAT_SIGMA(model.responseModel) * CHEAT_SIGMA(model.responseModel);
 
       for (size_t i = 0; i < control.numTrees; ++i) {
         Tree& tree_i(*TREE_AT(state.trees, i, scratch.nodeSize));
@@ -430,13 +433,7 @@ namespace dbarts {
       if (control.responseIsBinary) {
         sampleProbitLatentVariables(*this, state.totalFits, const_cast<double*>(scratch.yRescaled));
       } else {
-        double sumOfSquaredResiduals;
-        if (data.weights != NULL) {
-          sumOfSquaredResiduals = ext_mt_computeWeightedSumOfSquaredResiduals(threadManager, scratch.yRescaled, data.numObservations, data.weights, state.totalFits);
-        } else {
-          sumOfSquaredResiduals = ext_mt_computeSumOfSquaredResiduals(threadManager, scratch.yRescaled, data.numObservations, state.totalFits);
-        }
-        state.sigma = std::sqrt(model.sigmaSqPrior->drawFromPosterior(control.rng, numEffectiveObservations, sumOfSquaredResiduals));
+        model.responseModel->drawFromPosterior(*this, scratch.yRescaled, state.totalFits);
       }
       
       if (!isThinningIteration) {
@@ -447,7 +444,7 @@ namespace dbarts {
         
         countVariableUses(*this, variableCounts);
         
-        storeSamples(*this, results, state.totalFits, state.totalTestFits, state.sigma, variableCounts, simNum);
+        storeSamples(*this, results, state.totalFits, state.totalTestFits, CHEAT_SIGMA(model.responseModel), variableCounts, simNum);
         
         if (control.callback != NULL) {
           control.callback(control.callbackData, *this, isBurningIn,
@@ -500,14 +497,9 @@ namespace {
     
     ext_printf("Prior:\n");
     // dirty hack... should have priors print themselves
-    double sigma = std::sqrt(1.0 / static_cast<EndNode::MeanNormalModel*>(model.endNodeModel)->precision);
-    double k = (control.responseIsBinary ? 3.0 : 0.5) /  (sigma * std::sqrt(static_cast<double>(control.numTrees)));
-    ext_printf("\tk: %f\n", k);
+    model.endNodeModel->print(fit);
     if (!control.responseIsBinary) {
-      ChiSquaredPrior* residPrior = static_cast<ChiSquaredPrior*>(model.sigmaSqPrior);
-      ext_printf("\tdegrees of freedom in sigma prior: %f\n", residPrior->degreesOfFreedom);
-      double quantile = 1.0 - ext_percentileOfChiSquared(residPrior->scale * residPrior->degreesOfFreedom / fit.state.sigma / fit.state.sigma, residPrior->degreesOfFreedom);
-      ext_printf("\tquantile in sigma prior: %f\n", quantile);
+      model.responseModel->print(fit);
     }
     CGMPrior* treePrior = static_cast<CGMPrior*>(model.treePrior);
     ext_printf("\tpower and base for tree prior: %f %f\n", treePrior->power, treePrior->base);
@@ -639,10 +631,10 @@ namespace {
     Data& data(fit.data);
     Model& model(fit.model);
     Scratch& scratch(fit.scratch);
-    State& state(fit.state);
+    // State& state(fit.state);
     
-    state.sigma = control.responseIsBinary ? 1.0 : (data.sigmaEstimate / scratch.dataScale.range);
-    model.sigmaSqPrior->setScale(state.sigma * state.sigma * model.sigmaSqPrior->getScale());
+    CHEAT_SIGMA(fit.model.responseModel) = control.responseIsBinary ? 1.0 : (data.sigmaEstimate / scratch.dataScale.range);
+    fit.model.responseModel->setScale(fit, CHEAT_SIGMA(fit.model.responseModel) * CHEAT_SIGMA(fit.model.responseModel) * model.responseModel->getScale(fit));
   }
   
   void setInitialCutPoints(BARTFit& fit) {
@@ -778,8 +770,9 @@ namespace {
       for (size_t i = 0; i < data.numTestObservations; ++i) state.totalTestFits[i] = 0.0;
     }
     
+    double sigma_sq = CHEAT_SIGMA(fit.model.responseModel);
     for (size_t i = 0; i < control.numTrees; ++i) {
-      TREE_AT(state.trees, i, fit.scratch.nodeSize)->updateWithNewCovariates(fit, state.sigma * state.sigma);
+      TREE_AT(state.trees, i, fit.scratch.nodeSize)->updateWithNewCovariates(fit, sigma_sq);
     }
   }
   
@@ -1028,8 +1021,8 @@ namespace dbarts {
     
     // because of a peculiarity of how this gets mucked around on creation, this is necessary
     double scaleFactor = control.responseIsBinary ? 1.0 : (data.sigmaEstimate / scratch.dataScale.range);
-    double originalScale = model.sigmaSqPrior->getScale();
-    model.sigmaSqPrior->setScale(originalScale / (scaleFactor * scaleFactor));
+    double originalScale = model.responseModel->getScale(*this);
+    model.responseModel->setScale(*this, originalScale / (scaleFactor * scaleFactor));
     
     if (ext_bio_writeNChars(&bio, "00.08.00", VERSION_STRING_LENGTH) != 0) goto save_failed;
     
@@ -1045,7 +1038,7 @@ namespace dbarts {
     
     ext_bio_invalidate(&bio);
     
-    model.sigmaSqPrior->setScale(originalScale);
+    model.responseModel->setScale(*this, originalScale);
     
     printTerminalSummary(*this);
     
@@ -1053,7 +1046,7 @@ namespace dbarts {
     
 save_failed:
     ext_bio_invalidate(&bio);
-    model.sigmaSqPrior->setScale(originalScale);
+    model.responseModel->setScale(*this, originalScale);
     unlink(fileName);
     return false; 
   }
@@ -1100,8 +1093,7 @@ load_failed:
     delete [] data.maxNumCuts;
     delete [] data.variableTypes;
       
-    delete model.sigmaSqPrior;
-//    delete model.muPrior;
+    delete model.responseModel;
     delete model.endNodeModel;
     delete model.treePrior;
     

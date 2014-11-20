@@ -11,6 +11,7 @@
 
 #include <dbarts/bartFit.hpp>
 #include <dbarts/model.hpp>
+#include <dbarts/responseModel.hpp>
 #include "likelihood.hpp"
 #include "node.hpp"
 #include "tree.hpp"
@@ -55,7 +56,9 @@ namespace dbarts {
     // Since that involves pretty much finding a node to give birth, we just do that and then possibly ignore
     // it.
     
-    double sigma_sq = fit.state.sigma * fit.state.sigma;
+    // double sigma_sq = fit.state.sigma * fit.state.sigma;
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma;
+    sigma_sq *= sigma_sq;
 
     double transitionProbabilityOfSelectingNodeForBirth;
     Node* nodeToChangePtr = drawBirthableNode(fit, tree, &transitionProbabilityOfSelectingNodeForBirth);

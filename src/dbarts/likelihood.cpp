@@ -4,8 +4,8 @@
 #include <cstddef>
 
 #include <dbarts/bartFit.hpp>
-// #include <dbarts/model.hpp>
 #include <dbarts/endNodeModel.hpp>
+#include <dbarts/responseModel.hpp>
 #include <dbarts/state.hpp>
 #include "node.hpp"
 
@@ -18,12 +18,15 @@ namespace dbarts {
     size_t numBottomNodes = bottomVector.size();
     
     double logProbability = 0.0;
+    double sigma_sq = static_cast<const Response::NormalChiSquaredModel*>(fit.model.responseModel)->sigma;
+    sigma_sq *= sigma_sq;
+    
     for (size_t i = 0; i < numBottomNodes; ++i) {
       const Node& bottomNode(*bottomVector[i]);
       
       if (bottomNode.getNumObservations() == 0) return -10000000.0;
       
-      logProbability += fit.model.endNodeModel->computeLogIntegratedLikelihood(fit, bottomNode, y, fit.state.sigma * fit.state.sigma);
+      logProbability += fit.model.endNodeModel->computeLogIntegratedLikelihood(fit, bottomNode, y, sigma_sq);
     }
     
     return logProbability;
